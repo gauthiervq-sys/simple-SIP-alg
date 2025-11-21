@@ -28,6 +28,15 @@
     <h1>SIP ALG & Connectivity Check</h1>
     <p style="text-align:center; color: #777; font-size: 0.9em;">Target: 193.105.36.4 (Ubuntu)</p>
 
+    <div style="text-align:center; margin-bottom: 20px; padding: 15px; background: #f9f9f9; border-radius: 5px;">
+        <label style="font-weight: 600; color: #555; margin-right: 10px;">Test Port:</label>
+        <select id="port-select" style="padding: 8px 15px; border: 1px solid #ddd; border-radius: 4px; font-size: 14px; cursor: pointer;">
+            <option value="5060" selected>5060 (Default SIP)</option>
+            <option value="5062">5062 (Alternative SIP)</option>
+        </select>
+        <span id="current-port" style="margin-left: 15px; color: #3498db; font-weight: 600;"></span>
+    </div>
+
     <div class="status-row">
         <span class="label">1. SIP REGISTER</span>
         <span id="status-register" class="status">Waiting...</span>
@@ -64,7 +73,7 @@
 
 <script>
     let ws;
-    const HOST = window.location.host; // Uses the current IP/Port
+    const HOST = window.location.hostname; // Get just the hostname
     
     function updateStatus(id, state, text) {
         const el = document.getElementById('status-' + id);
@@ -74,15 +83,20 @@
 
     function startTest() {
         const btn = document.getElementById('start-btn');
+        const selectedPort = document.getElementById('port-select').value;
+        
         btn.disabled = true;
         btn.textContent = "Running Tests...";
+        
+        // Display which port is being tested
+        document.getElementById('current-port').textContent = `Testing on port ${selectedPort}`;
         
         // Reset UI
         ['register', 'subscribe', 'notify', 'invite', 'quality'].forEach(id => updateStatus(id, 'pending', 'Running...'));
         document.getElementById('quality-metrics').style.display = 'none';
 
-        // Connect WS
-        ws = new WebSocket(`ws://${HOST}`);
+        // Connect WS to the selected port
+        ws = new WebSocket(`ws://${HOST}:${selectedPort}`);
 
         ws.onopen = () => {
             runSequence();
@@ -90,7 +104,9 @@
 
         ws.onerror = (err) => {
             updateStatus('register', 'error', 'Connection Failed');
+            document.getElementById('current-port').textContent = `Failed to connect to port ${selectedPort}`;
             btn.disabled = false;
+            btn.textContent = "Start Check";
         };
 
         ws.onmessage = (event) => {
@@ -204,6 +220,10 @@
         updateStatus('quality', statusClass, resultText);
         document.getElementById('start-btn').textContent = "Start Check";
         document.getElementById('start-btn').disabled = false;
+        
+        const selectedPort = document.getElementById('port-select').value;
+        document.getElementById('current-port').textContent = `Test completed on port ${selectedPort}`;
+        
         ws.close();
     }
 </script>
