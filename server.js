@@ -5,32 +5,37 @@ const path = require('path');
 
 const app = express();
 const server = http.createServer(app);
-const wss = new WebSocket.Server({ server });
 
-const PORT = 3000;
+const PORTS = [3000, 5060, 5062];
 const HOST_IP = '193.105.36.4'; // Your WAN IP
 
 // Serve static frontend files
 app.use(express.static(path.join(__dirname, 'public')));
 
-// Handle WebSocket connections
-wss.on('connection', (ws, req) => {
-    const clientIp = req.socket.remoteAddress;
-    console.log(`New client connected from ${clientIp}`);
+// Create WebSocket servers for each port
+const wsServers = [];
 
-    ws.on('message', (message) => {
-        try {
-            const data = JSON.parse(message);
-            handleMessage(ws, data, clientIp);
-        } catch (e) {
-            console.error('Invalid JSON received', e);
-        }
-    });
+// Helper function to setup WebSocket connection handler
+function setupWebSocketHandler(wss) {
+    wss.on('connection', (ws, req) => {
+        const clientIp = req.socket.remoteAddress;
+        const localPort = req.socket.localPort;
+        console.log(`New client connected from ${clientIp} on port ${localPort}`);
 
-    ws.on('close', () => {
-        console.log('Client disconnected');
+        ws.on('message', (message) => {
+            try {
+                const data = JSON.parse(message);
+                handleMessage(ws, data, clientIp);
+            } catch (e) {
+                console.error('Invalid JSON received', e);
+            }
+        });
+
+        ws.on('close', () => {
+            console.log(`Client disconnected from port ${localPort}`);
+        });
     });
-});
+}
 
 function handleMessage(ws, data, clientIp) {
     const { type, step, payload } = data;
@@ -89,7 +94,43 @@ function handleMessage(ws, data, clientIp) {
     }
 }
 
-server.listen(PORT, '0.0.0.0', () => {
-    console.log(`SIP Check Server running on http://0.0.0.0:${PORT}`);
-    console.log(`Public access: http://${HOST_IP}:${PORT}`);
+server.listen(PORTS[0], '0.0.0.0', () => {
+    console.log(`SIP Check Server (HTTP + WebSocket) running on port ${PORTS[0]}`);
+    console.log(`Public access: http://${HOST_IP}:${PORTS[0]}`);
+});
+
+// Setup WebSocket on the main HTTP server (port 3000)
+const mainWss = new WebSocket.Server({ server });
+setupWebSocketHandler(mainWss);
+wsServers.push({ port: PORTS[0], wss: mainWss });
+
+// Create additional WebSocket servers on ports 5060 and 5062
+PORTS.slice(1).forEach(port => {
+    try {
+        const wsServer = http.createServer((req, res) => {
+            // Handle non-WebSocket HTTP requests
+            res.writeHead(200, { 'Content-Type': 'text/plain' });
+            res.end(`SIP WebSocket Server on port ${port}\n`);
+        });
+        const wss = new WebSocket.Server({ server: wsServer });
+        
+        setupWebSocketHandler(wss);
+        
+        wsServer.listen(port, '0.0.0.0', () => {
+            console.log(`WebSocket SIP Server running on port ${port}`);
+            console.log(`Public access: ws://${HOST_IP}:${port}`);
+        });
+
+        wsServer.on('error', (err) => {
+            if (err.code === 'EADDRINUSE') {
+                console.warn(`⚠️  Warning: Port ${port} is already in use (possibly Asterisk). Skipping this port.`);
+            } else {
+                console.error(`Error on port ${port}:`, err);
+            }
+        });
+
+        wsServers.push({ port, wss });
+    } catch (err) {
+        console.error(`Failed to create server on port ${port}:`, err);
+    }
 });
