@@ -1,0 +1,16 @@
+{
+  "name": "simple-sip-alg",
+  "version": "1.0.0",
+  "description": "SIP ALG check tool with backend and web-based frontend",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "keywords": ["sip", "alg", "websocket", "asterisk"],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "express": "^4.18.2",
+    "ws": "^8.14.2"
+  }
+}

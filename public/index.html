@@ -18,6 +18,10 @@
         button { width: 100%; padding: 15px; background-color: #3498db; color: white; border: none; border-radius: 5px; font-size: 16px; cursor: pointer; margin-top: 20px; transition: background 0.3s; }
         button:hover { background-color: #2980b9; }
         button:disabled { background-color: #bdc3c7; cursor: not-allowed; }
+        .port-selector { margin: 20px 0; padding: 15px; background: #f8f9fa; border-radius: 5px; }
+        .port-selector label { font-weight: 600; color: #555; display: block; margin-bottom: 8px; }
+        .port-selector select { width: 100%; padding: 10px; border: 2px solid #ddd; border-radius: 5px; font-size: 14px; background: white; cursor: pointer; }
+        .port-selector select:focus { outline: none; border-color: #3498db; }
         #quality-metrics { margin-top: 10px; font-size: 0.9em; color: #666; display: none; background: #fafafa; padding: 10px; border-radius: 5px; }
         .metric { display: flex; justify-content: space-between; margin-bottom: 5px; }
     </style>
@@ -27,6 +31,15 @@
 <div class="container">
     <h1>SIP ALG & Connectivity Check</h1>
     <p style="text-align:center; color: #777; font-size: 0.9em;">Target: 193.105.36.4 (Ubuntu)</p>
+
+    <div class="port-selector">
+        <label for="port-select">Select Test Port:</label>
+        <select id="port-select">
+            <option value="3000">Port 3000 (Default/Web)</option>
+            <option value="5060">Port 5060 (Standard SIP)</option>
+            <option value="5062">Port 5062 (Alternative SIP)</option>
+        </select>
+    </div>
 
     <div class="status-row">
         <span class="label">1. SIP REGISTER</span>
@@ -64,7 +77,6 @@
 
 <script>
     let ws;
-    const HOST = window.location.host; // Uses the current IP/Port
     
     function updateStatus(id, state, text) {
         const el = document.getElementById('status-' + id);
@@ -81,8 +93,12 @@
         ['register', 'subscribe', 'notify', 'invite', 'quality'].forEach(id => updateStatus(id, 'pending', 'Running...'));
         document.getElementById('quality-metrics').style.display = 'none';
 
-        // Connect WS
-        ws = new WebSocket(`ws://${HOST}`);
+        // Get selected port
+        const selectedPort = document.getElementById('port-select').value;
+        const hostname = window.location.hostname || '193.105.36.4';
+        
+        // Connect WS to selected port
+        ws = new WebSocket(`ws://${hostname}:${selectedPort}`);
 
         ws.onopen = () => {
             runSequence();
@@ -91,6 +107,7 @@
         ws.onerror = (err) => {
             updateStatus('register', 'error', 'Connection Failed');
             btn.disabled = false;
+            btn.textContent = "Start Check";
         };
 
         ws.onmessage = (event) => {
