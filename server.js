@@ -12,9 +12,6 @@ const HOST_IP = '193.105.36.4'; // Your WAN IP
 // Serve static frontend files
 app.use(express.static(path.join(__dirname, 'public')));
 
-// Create WebSocket servers for each port
-const wsServers = [];
-
 // Helper function to setup WebSocket connection handler
 function setupWebSocketHandler(wss) {
     wss.on('connection', (ws, req) => {
@@ -102,7 +99,6 @@ server.listen(PORTS[0], '0.0.0.0', () => {
 // Setup WebSocket on the main HTTP server (port 3000)
 const mainWss = new WebSocket.Server({ server });
 setupWebSocketHandler(mainWss);
-wsServers.push({ port: PORTS[0], wss: mainWss });
 
 // Create additional WebSocket servers on ports 5060 and 5062
 PORTS.slice(1).forEach(port => {
@@ -128,8 +124,6 @@ PORTS.slice(1).forEach(port => {
                 console.error(`Error on port ${port}:`, err);
             }
         });
-
-        wsServers.push({ port, wss });
     } catch (err) {
         console.error(`Failed to create server on port ${port}:`, err);
     }
