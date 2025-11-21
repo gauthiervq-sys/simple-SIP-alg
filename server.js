@@ -108,18 +108,38 @@ server.listen(PORT, '0.0.0.0', () => {
 // Try to create WebSocket server on port 5060
 try {
     wss5060 = new WebSocket.Server({ port: PORT_5060, host: '0.0.0.0' });
+    
+    wss5060.on('error', (error) => {
+        if (error.code === 'EADDRINUSE') {
+            console.warn(`⚠️  Warning: Port ${PORT_5060} is already in use`);
+            console.warn(`   This is likely because Asterisk or another service is using this port.`);
+            console.warn(`   Server will continue running on ports ${PORT} and ${PORT_5062}.`);
+        } else {
+            console.warn(`⚠️  Warning: WebSocket server error on port ${PORT_5060}: ${error.message}`);
+        }
+        wss5060 = null;
+    });
+    
     setupWebSocketHandlers(wss5060, PORT_5060);
     console.log(`WebSocket server running on port ${PORT_5060}`);
 } catch (error) {
     console.warn(`⚠️  Warning: Could not start WebSocket server on port ${PORT_5060}`);
-    console.warn(`   This is likely because Asterisk or another service is using this port.`);
-    console.warn(`   Server will continue running on ports ${PORT} and ${PORT_5062}.`);
     console.warn(`   Error: ${error.message}`);
 }
 
 // Create WebSocket server on port 5062
 try {
     wss5062 = new WebSocket.Server({ port: PORT_5062, host: '0.0.0.0' });
+    
+    wss5062.on('error', (error) => {
+        if (error.code === 'EADDRINUSE') {
+            console.error(`❌ Error: Port ${PORT_5062} is already in use`);
+        } else {
+            console.error(`❌ Error: WebSocket server error on port ${PORT_5062}: ${error.message}`);
+        }
+        wss5062 = null;
+    });
+    
     setupWebSocketHandlers(wss5062, PORT_5062);
     console.log(`WebSocket server running on port ${PORT_5062}`);
 } catch (error) {

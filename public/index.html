@@ -94,6 +94,7 @@
         document.getElementById('quality-metrics').style.display = 'none';
 
         // Connect WS to selected port
+        // Note: Using ws:// for local testing. In production, use wss:// for secure connections
         ws = new WebSocket(`ws://${HOST}:${selectedPort}`);
 
         ws.onopen = () => {
