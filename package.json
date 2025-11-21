@@ -1,0 +1,21 @@
+{
+  "name": "simple-sip-alg",
+  "version": "1.0.0",
+  "description": "SIP ALG and Quality Check Application",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "keywords": [
+    "sip",
+    "alg",
+    "websocket",
+    "quality-check"
+  ],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "express": "^4.18.2",
+    "ws": "^8.17.1"
+  }
+}
