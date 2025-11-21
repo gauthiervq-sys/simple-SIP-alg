@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SIP ALG & Quality Check</title>
+    <style>
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #f4f7f6; display: flex; justify-content: center; padding-top: 50px; }
+        .container { background: white; padding: 30px; border-radius: 10px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); width: 600px; }
+        h1 { color: #333; text-align: center; }
+        .status-row { display: flex; justify-content: space-between; padding: 15px; border-bottom: 1px solid #eee; align-items: center; }
+        .status-row:last-child { border-bottom: none; }
+        .label { font-weight: 600; color: #555; }
+        .status { font-weight: bold; color: #999; }
+        .status.pending { color: #f39c12; }
+        .status.success { color: #27ae60; }
+        .status.error { color: #c0392b; }
+        button { width: 100%; padding: 15px; background-color: #3498db; color: white; border: none; border-radius: 5px; font-size: 16px; cursor: pointer; margin-top: 20px; transition: background 0.3s; }
+        button:hover { background-color: #2980b9; }
+        button:disabled { background-color: #bdc3c7; cursor: not-allowed; }
+        #quality-metrics { margin-top: 10px; font-size: 0.9em; color: #666; display: none; background: #fafafa; padding: 10px; border-radius: 5px; }
+        .metric { display: flex; justify-content: space-between; margin-bottom: 5px; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h1>SIP ALG & Connectivity Check</h1>
+    <p style="text-align:center; color: #777; font-size: 0.9em;">Target: 193.105.36.4 (Ubuntu)</p>
+
+    <div class="status-row">
+        <span class="label">1. SIP REGISTER</span>
+        <span id="status-register" class="status">Waiting...</span>
+    </div>
+    <div class="status-row">
+        <span class="label">2. SIP SUBSCRIBE</span>
+        <span id="status-subscribe" class="status">Waiting...</span>
+    </div>
+    <div class="status-row">
+        <span class="label">3. SIP NOTIFY (Server -> Client)</span>
+        <span id="status-notify" class="status">Waiting...</span>
+    </div>
+    <div class="status-row">
+        <span class="label">4. SIP INVITE</span>
+        <span id="status-invite" class="status">Waiting...</span>
+    </div>
+    <div class="status-row">
+        <div style="width:100%">
+            <div style="display:flex; justify-content:space-between;">
+                <span class="label">5. Quality Test (30s)</span>
+                <span id="status-quality" class="status">Waiting...</span>
+            </div>
+            <div id="quality-metrics">
+                <div class="metric"><span>Packets Sent:</span> <span id="q-sent">0</span></div>
+                <div class="metric"><span>Latency (avg):</span> <span id="q-lat">0 ms</span></div>
+                <div class="metric"><span>Jitter:</span> <span id="q-jit">0 ms</span></div>
+                <div class="metric"><span>Packet Loss:</span> <span id="q-loss">0%</span></div>
+            </div>
+        </div>
+    </div>
+
+    <button id="start-btn" onclick="startTest()">Start Check</button>
+</div>
+
+<script>
+    let ws;
+    const HOST = window.location.host; // Uses the current IP/Port
+    
+    function updateStatus(id, state, text) {
+        const el = document.getElementById('status-' + id);
+        el.className = 'status ' + state;
+        el.textContent = text;
+    }
+
+    function startTest() {
+        const btn = document.getElementById('start-btn');
+        btn.disabled = true;
+        btn.textContent = "Running Tests...";
+        
+        // Reset UI
+        ['register', 'subscribe', 'notify', 'invite', 'quality'].forEach(id => updateStatus(id, 'pending', 'Running...'));
+        document.getElementById('quality-metrics').style.display = 'none';
+
+        // Connect WS
+        ws = new WebSocket(`ws://${HOST}`);
+
+        ws.onopen = () => {
+            runSequence();
+        };
+
+        ws.onerror = (err) => {
+            updateStatus('register', 'error', 'Connection Failed');
+            btn.disabled = false;
+        };
+
+        ws.onmessage = (event) => {
+            const msg = JSON.parse(event.data);
+            handleServerMessage(msg);
+        };
+    }
+
+    let qualityInterval;
+    let qualityPackets = [];
+    let sentCount = 0;
+    let receivedCount = 0;
+
+    function runSequence() {
+        // Step 1: Register
+        sendSIP('SIP_REGISTER', { uri: 'sip:test@193.105.36.4' });
+
+        // Step 2: Subscribe (triggers Notify)
+        setTimeout(() => {
+            sendSIP('SIP_SUBSCRIBE', { event: 'presence' });
+        }, 1000);
+
+        // Step 3: Invite
+        setTimeout(() => {
+            sendSIP('SIP_INVITE', { to: 'sip:service@193.105.36.4' });
+        }, 3000);
+
+        // Step 4: Start Quality Test after SIP checks
+        setTimeout(() => {
+            startQualityTest();
+        }, 5000);
+    }
+
+    function sendSIP(type, payload) {
+        ws.send(JSON.stringify({ type, payload }));
+    }
+
+    function handleServerMessage(msg) {
+        if (msg.type === 'SIP_RESPONSE') {
+            if (msg.step === 'register' && msg.status === 200) updateStatus('register', 'success', '200 OK (Pass)');
+            if (msg.step === 'subscribe' && msg.status === 200) updateStatus('subscribe', 'success', '200 OK (Pass)');
+            if (msg.step === 'invite' && msg.status === 200) updateStatus('invite', 'success', '200 OK (Pass)');
+        } 
+        else if (msg.type === 'SIP_REQUEST') {
+            if (msg.step === 'notify') updateStatus('notify', 'success', 'Received NOTIFY (Pass)');
+        }
+        else if (msg.type === 'PONG') {
+            receivedCount++;
+            const now = Date.now();
+            const rtt = now - msg.clientTimestamp;
+            qualityPackets.push(rtt);
+            updateQualityUI();
+        }
+    }
+
+    function startQualityTest() {
+        updateStatus('quality', 'pending', 'Testing Connection (30s)...');
+        document.getElementById('quality-metrics').style.display = 'block';
+        
+        sentCount = 0;
+        receivedCount = 0;
+        qualityPackets = [];
+        
+        const startTime = Date.now();
+        
+        qualityInterval = setInterval(() => {
+            if (Date.now() - startTime > 30000) {
+                finishQualityTest();
+                return;
+            }
+            sentCount++;
+            ws.send(JSON.stringify({ type: 'PING', payload: { timestamp: Date.now(), seq: sentCount } }));
+        }, 200); // Send ping every 200ms
+    }
+
+    function updateQualityUI() {
+        if (qualityPackets.length === 0) return;
+        
+        const sum = qualityPackets.reduce((a, b) => a + b, 0);
+        const avg = Math.round(sum / qualityPackets.length);
+        
+        // Jitter calculation (avg deviation from mean)
+        let jitterSum = 0;
+        for(let i=0; i < qualityPackets.length - 1; i++) {
+            jitterSum += Math.abs(qualityPackets[i] - qualityPackets[i+1]);
+        }
+        const jitter = qualityPackets.length > 1 ? Math.round(jitterSum / (qualityPackets.length - 1)) : 0;
+
+        document.getElementById('q-sent').textContent = sentCount;
+        document.getElementById('q-lat').textContent = avg + ' ms';
+        document.getElementById('q-jit').textContent = jitter + ' ms';
+    }
+
+    function finishQualityTest() {
+        clearInterval(qualityInterval);
+        const loss = sentCount > 0 ? ((sentCount - receivedCount) / sentCount * 100).toFixed(1) : 0;
+        document.getElementById('q-loss').textContent = loss + '%';
+        
+        let resultText = "Pass";
+        let statusClass = "success";
+
+        // Pass criteria: Loss < 1%, Jitter < 30ms, Latency < 150ms
+        const finalJitter = parseInt(document.getElementById('q-jit').textContent);
+        const finalLat = parseInt(document.getElementById('q-lat').textContent);
+        
+        if (loss > 1 || finalJitter > 30 || finalLat > 150) {
+            resultText = "Low Quality";
+            statusClass = "pending"; // Warning color
+        }
+
+        updateStatus('quality', statusClass, resultText);
+        document.getElementById('start-btn').textContent = "Start Check";
+        document.getElementById('start-btn').disabled = false;
+        ws.close();
+    }
+</script>
+
+</body>
+</html>
