@@ -173,7 +173,11 @@ function sendUdpError(socket, rinfo, errorMessage) {
         type: 'ERROR', 
         message: errorMessage 
     });
-    socket.send(errorResponse, rinfo.port, rinfo.address);
+    socket.send(errorResponse, rinfo.port, rinfo.address, (err) => {
+        if (err) {
+            console.error(`[UDP] Error sending error response:`, err);
+        }
+    });
 }
 
 // Helper function to setup UDP socket
@@ -192,7 +196,6 @@ function setupUdpServer(port, isSecondary = false) {
         } else {
             console.error(`❌ Error: UDP server error on port ${port}: ${err.message}`);
         }
-        return null;
     });
     
     udpSocket.on('message', (msg, rinfo) => {
@@ -212,14 +215,9 @@ function setupUdpServer(port, isSecondary = false) {
         console.log(`UDP server running on ${address.address}:${address.port}`);
     });
     
-    try {
-        udpSocket.bind(port, '0.0.0.0');
-        return udpSocket;
-    } catch (error) {
-        console.error(`❌ Error: Could not start UDP server on port ${port}`);
-        console.error(`   Error: ${error.message}`);
-        return null;
-    }
+    // Bind the socket (errors are handled by the error event listener)
+    udpSocket.bind(port, '0.0.0.0');
+    return udpSocket;
 }
 
 // Setup UDP servers
