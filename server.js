@@ -2,6 +2,7 @@ const express = require('express');
 const WebSocket = require('ws');
 const http = require('http');
 const path = require('path');
+const dgram = require('dgram');
 
 const app = express();
 const server = http.createServer(app);
@@ -11,6 +12,7 @@ const PORT = 3000;
 const PORT_5060 = 5060;
 const PORT_5062 = 5062;
 const HOST_IP = '193.105.36.4'; // Your WAN IP
+const OPEN_STATE = 1; // WebSocket.OPEN constant value, used for both WebSocket and UDP wrapper
 
 // Serve static frontend files
 app.use(express.static(path.join(__dirname, 'public')));
@@ -48,7 +50,8 @@ function handleMessage(ws, data, clientIp) {
 
     // Helper to send back to client
     const send = (msgType, content) => {
-        if (ws.readyState === WebSocket.OPEN) {
+        // Check if connection is open (works for both WebSocket and UDP wrapper)
+        if (ws.readyState === OPEN_STATE) {
             ws.send(JSON.stringify({ type: msgType, ...content }));
         }
     };
@@ -147,11 +150,88 @@ try {
     console.error(`   Error: ${error.message}`);
 }
 
+// Create UDP sockets for ports 5060 and 5062
+let udp5060 = null;
+let udp5062 = null;
+
+// Helper function to create a WebSocket-like wrapper for UDP responses
+function createUdpWrapper(socket, rinfo, port) {
+    return {
+        readyState: OPEN_STATE, // Use same state as WebSocket.OPEN for compatibility
+        send: (message) => {
+            socket.send(message, rinfo.port, rinfo.address, (err) => {
+                if (err) {
+                    console.error(`[UDP ${port}] Error sending response:`, err);
+                }
+            });
+        }
+    };
+}
+
+// Helper function to send error response over UDP
+function sendUdpError(socket, rinfo, errorMessage) {
+    const errorResponse = JSON.stringify({ 
+        type: 'ERROR', 
+        message: errorMessage 
+    });
+    socket.send(errorResponse, rinfo.port, rinfo.address, (err) => {
+        if (err) {
+            console.error(`[UDP] Error sending error response:`, err);
+        }
+    });
+}
+
+// Helper function to setup UDP socket
+function setupUdpServer(port, isSecondary = false) {
+    const udpSocket = dgram.createSocket('udp4');
+    
+    udpSocket.on('error', (err) => {
+        if (err.code === 'EADDRINUSE') {
+            if (isSecondary) {
+                console.error(`❌ Error: UDP port ${port} is already in use`);
+            } else {
+                console.warn(`⚠️  Warning: UDP port ${port} is already in use`);
+                console.warn(`   This is likely because Asterisk or another service is using this port.`);
+                console.warn(`   UDP server will continue on port ${PORT_5062} only.`);
+            }
+        } else {
+            console.error(`❌ Error: UDP server error on port ${port}: ${err.message}`);
+        }
+    });
+    
+    udpSocket.on('message', (msg, rinfo) => {
+        console.log(`[UDP ${port}] Received message from ${rinfo.address}:${rinfo.port}`);
+        try {
+            const data = JSON.parse(msg.toString());
+            const udpWrapper = createUdpWrapper(udpSocket, rinfo, port);
+            handleMessage(udpWrapper, data, rinfo.address);
+        } catch (e) {
+            console.error(`[UDP ${port}] Invalid JSON received:`, e.message);
+            sendUdpError(udpSocket, rinfo, 'Invalid JSON format');
+        }
+    });
+    
+    udpSocket.on('listening', () => {
+        const address = udpSocket.address();
+        console.log(`UDP server running on ${address.address}:${address.port}`);
+    });
+    
+    // Bind the socket (errors are handled by the error event listener)
+    udpSocket.bind(port, '0.0.0.0');
+    return udpSocket;
+}
+
+// Setup UDP servers
+udp5060 = setupUdpServer(PORT_5060, false);
+udp5062 = setupUdpServer(PORT_5062, true);
+
 // Graceful shutdown handler
 process.on('SIGINT', () => {
     console.log('\nShutting down servers...');
     server.close();
     if (wss5060) wss5060.close();
     if (wss5062) wss5062.close();
+    if (udp5060) udp5060.close();
+    if (udp5062) udp5062.close();
     process.exit(0);
 });
