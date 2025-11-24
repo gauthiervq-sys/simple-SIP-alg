@@ -3,6 +3,7 @@ const WebSocket = require('ws');
 const http = require('http');
 const path = require('path');
 const dgram = require('dgram');
+const { runAlgTest } = require('./algTest');
 
 const app = express();
 const server = http.createServer(app);
@@ -11,7 +12,9 @@ const wss3000 = new WebSocket.Server({ server });
 const PORT = 3000;
 const PORT_5060 = 5060;
 const PORT_5062 = 5062;
-const HOST_IP = '193.105.36.4'; // Your WAN IP
+const HOST_IP = process.env.SIPALG_HOST_IP || '193.105.36.4'; // Your WAN IP
+const ALG_TEST_IP = process.env.SIPALG_TEST_IP || HOST_IP;
+const ALG_TEST_PORT = parseInt(process.env.SIPALG_TEST_PORT || '5060', 10);
 const OPEN_STATE = 1; // WebSocket.OPEN constant value, used for both WebSocket and UDP wrapper
 
 // Serve static frontend files
@@ -55,6 +58,34 @@ function handleMessage(ws, data, clientIp) {
             ws.send(JSON.stringify({ type: msgType, ...content }));
         }
     };
+
+    // 0. ALG TEST (Mirror-style test)
+    if (type === 'ALG_TEST') {
+        console.log(`[ALG Test] Received ALG_TEST request from ${clientIp}`);
+        
+        const testServerIp = (payload && payload.serverIp) || ALG_TEST_IP;
+        const testServerPort = (payload && payload.serverPort) || ALG_TEST_PORT;
+        const localIp = '0.0.0.0'; // Let OS pick appropriate local address
+        const localPort = 5060;
+        
+        runAlgTest({
+            serverIp: testServerIp,
+            serverPort: testServerPort,
+            localIp: localIp,
+            localPort: localPort,
+            timeout: 10000
+        })
+        .then(result => {
+            console.log(`[ALG Test] Test completed. Return code: ${result.returnCode}`);
+            send('ALG_RESULT', { result });
+        })
+        .catch(error => {
+            console.error(`[ALG Test] Test failed: ${error.message}`);
+            send('ALG_RESULT', { error: error.message });
+        });
+        
+        return;
+    }
 
     // 1. REGISTER CHECK
     if (type === 'SIP_REGISTER') {

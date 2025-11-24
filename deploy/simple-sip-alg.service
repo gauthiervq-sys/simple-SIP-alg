@@ -1,0 +1,29 @@
+[Unit]
+Description=Simple SIP ALG and Quality Check Tool
+After=network.target
+Documentation=https://github.com/gauthiervq-sys/simple-SIP-alg
+
+[Service]
+Type=simple
+User=www-data
+WorkingDirectory=/opt/simple-SIP-alg
+Environment="NODE_ENV=production"
+Environment="SIPALG_HOST_IP=193.105.36.4"
+Environment="SIPALG_TEST_IP=193.105.36.4"
+Environment="SIPALG_TEST_PORT=5060"
+ExecStart=/usr/bin/node /opt/simple-SIP-alg/server.js
+Restart=on-failure
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=simple-sip-alg
+
+# Security settings
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/opt/simple-SIP-alg
+
+[Install]
+WantedBy=multi-user.target
