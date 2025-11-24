@@ -2,6 +2,7 @@ const express = require('express');
 const WebSocket = require('ws');
 const http = require('http');
 const path = require('path');
+const dgram = require('dgram');
 
 const app = express();
 const server = http.createServer(app);
@@ -48,7 +49,8 @@ function handleMessage(ws, data, clientIp) {
 
     // Helper to send back to client
     const send = (msgType, content) => {
-        if (ws.readyState === WebSocket.OPEN) {
+        // Check if ws has readyState (WebSocket) or if it's the UDP wrapper (readyState === 1)
+        if (ws.readyState === 1 || (ws.readyState === WebSocket.OPEN)) {
             ws.send(JSON.stringify({ type: msgType, ...content }));
         }
     };
@@ -147,11 +149,115 @@ try {
     console.error(`   Error: ${error.message}`);
 }
 
+// Create UDP sockets for ports 5060 and 5062
+let udp5060 = null;
+let udp5062 = null;
+
+// Helper function to create a WebSocket-like wrapper for UDP responses
+function createUdpWrapper(socket, rinfo) {
+    return {
+        readyState: 1, // Simulate OPEN state
+        send: (message) => {
+            socket.send(message, rinfo.port, rinfo.address, (err) => {
+                if (err) {
+                    console.error(`[UDP ${rinfo.port}] Error sending response:`, err);
+                }
+            });
+        }
+    };
+}
+
+// Setup UDP socket on port 5060
+try {
+    udp5060 = dgram.createSocket('udp4');
+    
+    udp5060.on('error', (err) => {
+        if (err.code === 'EADDRINUSE') {
+            console.warn(`⚠️  Warning: UDP port ${PORT_5060} is already in use`);
+            console.warn(`   This is likely because Asterisk or another service is using this port.`);
+            console.warn(`   UDP server will continue on port ${PORT_5062} only.`);
+        } else {
+            console.error(`❌ Error: UDP server error on port ${PORT_5060}: ${err.message}`);
+        }
+        udp5060 = null;
+    });
+    
+    udp5060.on('message', (msg, rinfo) => {
+        console.log(`[UDP ${PORT_5060}] Received message from ${rinfo.address}:${rinfo.port}`);
+        try {
+            const data = JSON.parse(msg.toString());
+            const udpWrapper = createUdpWrapper(udp5060, rinfo);
+            handleMessage(udpWrapper, data, rinfo.address);
+        } catch (e) {
+            console.error(`[UDP ${PORT_5060}] Invalid JSON received:`, e.message);
+            // Send error response
+            const errorResponse = JSON.stringify({ 
+                type: 'ERROR', 
+                message: 'Invalid JSON format' 
+            });
+            udp5060.send(errorResponse, rinfo.port, rinfo.address);
+        }
+    });
+    
+    udp5060.on('listening', () => {
+        const address = udp5060.address();
+        console.log(`UDP server running on ${address.address}:${address.port}`);
+    });
+    
+    udp5060.bind(PORT_5060, '0.0.0.0');
+} catch (error) {
+    console.error(`❌ Error: Could not start UDP server on port ${PORT_5060}`);
+    console.error(`   Error: ${error.message}`);
+}
+
+// Setup UDP socket on port 5062
+try {
+    udp5062 = dgram.createSocket('udp4');
+    
+    udp5062.on('error', (err) => {
+        if (err.code === 'EADDRINUSE') {
+            console.error(`❌ Error: UDP port ${PORT_5062} is already in use`);
+        } else {
+            console.error(`❌ Error: UDP server error on port ${PORT_5062}: ${err.message}`);
+        }
+        udp5062 = null;
+    });
+    
+    udp5062.on('message', (msg, rinfo) => {
+        console.log(`[UDP ${PORT_5062}] Received message from ${rinfo.address}:${rinfo.port}`);
+        try {
+            const data = JSON.parse(msg.toString());
+            const udpWrapper = createUdpWrapper(udp5062, rinfo);
+            handleMessage(udpWrapper, data, rinfo.address);
+        } catch (e) {
+            console.error(`[UDP ${PORT_5062}] Invalid JSON received:`, e.message);
+            // Send error response
+            const errorResponse = JSON.stringify({ 
+                type: 'ERROR', 
+                message: 'Invalid JSON format' 
+            });
+            udp5062.send(errorResponse, rinfo.port, rinfo.address);
+        }
+    });
+    
+    udp5062.on('listening', () => {
+        const address = udp5062.address();
+        console.log(`UDP server running on ${address.address}:${address.port}`);
+    });
+    
+    udp5062.bind(PORT_5062, '0.0.0.0');
+} catch (error) {
+    console.error(`❌ Error: Could not start UDP server on port ${PORT_5062}`);
+    console.error(`   Error: ${error.message}`);
+}
+
 // Graceful shutdown handler
 process.on('SIGINT', () => {
     console.log('\nShutting down servers...');
     server.close();
     if (wss5060) wss5060.close();
     if (wss5062) wss5062.close();
+    if (udp5060) udp5060.close();
+    if (udp5062) udp5062.close();
     process.exit(0);
 });
