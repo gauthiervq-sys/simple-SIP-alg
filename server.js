@@ -134,9 +134,45 @@ function handleMessage(ws, data, clientIp) {
     }
 }
 
-server.listen(PORT, '0.0.0.0', () => {
-    console.log(`SIP Check Server running on http://0.0.0.0:${PORT}`);
-    console.log(`Public access: http://${HOST_IP}:${PORT}`);
+// Start the main web server on port 3000
+server.listen(WEB_PORT, '0.0.0.0', () => {
+    console.log(`SIP Check Server running on http://0.0.0.0:${WEB_PORT}`);
+    console.log(`Public access: http://${HOST_IP}:${WEB_PORT}`);
+});
+
+// Try to start WebSocket servers on SIP ports (5060, 5062)
+SIP_PORTS.forEach(port => {
+    const sipHttpServer = http.createServer();
+    const sipWss = new WebSocket.Server({ server: sipHttpServer });
+    
+    setupWebSocketHandlers(sipWss, `SIP port ${port}`);
+    
+    // Handle errors from the HTTP server
+    sipHttpServer.on('error', (err) => {
+        if (err.code === 'EADDRINUSE') {
+            console.warn(`⚠ Warning: Port ${port} is already in use (possibly by Asterisk). Skipping this port.`);
+        } else {
+            console.error(`Error on port ${port}:`, err.message);
+        }
+    });
+    
+    // Handle errors from the WebSocket server
+    sipWss.on('error', (err) => {
+        if (err.code === 'EADDRINUSE') {
+            console.warn(`⚠ Warning: WebSocket port ${port} is already in use. Skipping this port.`);
+        } else {
+            console.error(`WebSocket error on port ${port}:`, err.message);
+        }
+    });
+    
+    try {
+        sipHttpServer.listen(port, '0.0.0.0', () => {
+            console.log(`WebSocket server running on port ${port} for SIP testing`);
+            console.log(`Test connection: ws://${HOST_IP}:${port}`);
+        });
+    } catch (err) {
+        console.warn(`⚠ Warning: Could not start server on port ${port}: ${err.message}`);
+    }
 });
 
 // Try to create WebSocket server on port 5060

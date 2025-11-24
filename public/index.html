@@ -87,6 +87,8 @@
 
     function startTest() {
         const btn = document.getElementById('start-btn');
+        const selectedPort = document.getElementById('port-select').value;
+        
         btn.disabled = true;
         btn.textContent = "Running Tests...";
         
@@ -266,6 +268,10 @@
         updateStatus('quality', statusClass, resultText);
         document.getElementById('start-btn').textContent = "Start Check";
         document.getElementById('start-btn').disabled = false;
+        
+        const selectedPort = document.getElementById('port-select').value;
+        document.getElementById('current-port').textContent = `Test completed on port ${selectedPort}`;
+        
         ws.close();
     }
 </script>
