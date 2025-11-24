@@ -1,280 +1,764 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>SIP ALG & Quality Check</title>
-    <style>
-        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #f4f7f6; display: flex; justify-content: center; padding-top: 50px; }
-        .container { background: white; padding: 30px; border-radius: 10px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); width: 600px; }
-        h1 { color: #333; text-align: center; }
-        .status-row { display: flex; justify-content: space-between; padding: 15px; border-bottom: 1px solid #eee; align-items: center; }
-        .status-row:last-child { border-bottom: none; }
-        .label { font-weight: 600; color: #555; }
-        .status { font-weight: bold; color: #999; }
-        .status.pending { color: #f39c12; }
-        .status.success { color: #27ae60; }
-        .status.error { color: #c0392b; }
-        button { width: 100%; padding: 15px; background-color: #3498db; color: white; border: none; border-radius: 5px; font-size: 16px; cursor: pointer; margin-top: 20px; transition: background 0.3s; }
-        button:hover { background-color: #2980b9; }
-        button:disabled { background-color: #bdc3c7; cursor: not-allowed; }
-        #quality-metrics { margin-top: 10px; font-size: 0.9em; color: #666; display: none; background: #fafafa; padding: 10px; border-radius: 5px; }
-        .metric { display: flex; justify-content: space-between; margin-bottom: 5px; }
-    </style>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>VoIP & SIP ALG Analyzer</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/react@18/umd/react.development.js" crossorigin></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js" crossorigin></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
 </head>
 <body>
+    <div id="root"></div>
 
-<div class="container">
-    <h1>SIP ALG & Connectivity Check</h1>
-    <p style="text-align:center; color: #777; font-size: 0.9em;">Target: 193.105.36.4 (Ubuntu)</p>
+    <script type="text/babel">
+        const { useState, useEffect, useRef } = React;
 
-    <div style="margin-bottom: 20px; text-align: center;">
-        <label for="port-select" style="font-weight: 600; color: #555; margin-right: 10px;">Test Port:</label>
-        <select id="port-select" style="padding: 8px 15px; font-size: 14px; border: 2px solid #3498db; border-radius: 5px; background: white; cursor: pointer;">
-            <option value="3000">Port 3000 (HTTP/WebSocket)</option>
-            <option value="5060">Port 5060 (SIP Standard)</option>
-            <option value="5062">Port 5062 (SIP Alternative)</option>
-        </select>
-    </div>
+        // --- ICON COMPONENTS ---
+        const Activity = ({ className }) => (
+            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline></svg>
+        );
+        const Wifi = ({ className }) => (
+            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M5 12.55a11 11 0 0 1 14.08 0"></path><path d="M1.42 9a16 16 0 0 1 21.16 0"></path><path d="M8.53 16.11a6 6 0 0 1 6.95 0"></path><line x1="12" y1="20" x2="12.01" y2="20"></line></svg>
+        );
+        const WifiOff = ({ className }) => (
+            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><line x1="1" y1="1" x2="23" y2="23"></line><path d="M16.72 11.06A10.94 10.94 0 0 1 19 12.55"></path><path d="M5 12.55a10.94 10.94 0 0 1 5.17-2.39"></path><path d="M10.71 5.05A16 16 0 0 1 22.58 9"></path><path d="M1.42 9a15.91 15.91 0 0 1 4.7-2.88"></path><path d="M8.53 16.11a6 6 0 0 1 6.95 0"></path><line x1="12" y1="20" x2="12.01" y2="20"></line></svg>
+        );
+        const AlertTriangle = ({ className }) => (
+            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>
+        );
+        const CheckCircle = ({ className }) => (
+            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>
+        );
+        const Info = ({ className }) => (
+            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>
+        );
+        const LineChart = ({ className }) => (
+            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M3 3v18h18"/><path d="M18.7 8l-5.1 5.2-2.8-2.7L7 14.3"/></svg>
+        );
+        const XCircle = ({ className }) => (
+            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><circle cx="12" cy="12" r="10"></circle><line x1="15" y1="9" x2="9" y2="15"></line><line x1="9" y1="9" x2="15" y2="15"></line></svg>
+        );
+        const RefreshCw = ({ className }) => (
+            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><polyline points="23 4 23 10 17 10"></polyline><polyline points="1 20 1 14 7 14"></polyline><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path></svg>
+        );
+        const Shield = ({ className }) => (
+            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path></svg>
+        );
+        const Phone = ({ className }) => (
+            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"></path></svg>
+        );
+        const Server = ({ className }) => (
+            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><rect x="2" y="2" width="20" height="8" rx="2" ry="2"></rect><rect x="2" y="14" width="20" height="8" rx="2" ry="2"></rect><line x1="6" y1="6" x2="6.01" y2="6"></line><line x1="6" y1="18" x2="6.01" y2="18"></line></svg>
+        );
 
-    <div class="status-row">
-        <span class="label">0. SIP ALG Detection (Mirror Test)</span>
-        <span id="status-alg" class="status">Waiting...</span>
-    </div>
-    <div class="status-row">
-        <span class="label">1. SIP REGISTER</span>
-        <span id="status-register" class="status">Waiting...</span>
-    </div>
-    <div class="status-row">
-        <span class="label">2. SIP SUBSCRIBE</span>
-        <span id="status-subscribe" class="status">Waiting...</span>
-    </div>
-    <div class="status-row">
-        <span class="label">3. SIP NOTIFY (Server -> Client)</span>
-        <span id="status-notify" class="status">Waiting...</span>
-    </div>
-    <div class="status-row">
-        <span class="label">4. SIP INVITE</span>
-        <span id="status-invite" class="status">Waiting...</span>
-    </div>
-    <div class="status-row">
-        <div style="width:100%">
-            <div style="display:flex; justify-content:space-between;">
-                <span class="label">5. Quality Test (30s)</span>
-                <span id="status-quality" class="status">Waiting...</span>
-            </div>
-            <div id="quality-metrics">
-                <div class="metric"><span>Packets Sent:</span> <span id="q-sent">0</span></div>
-                <div class="metric"><span>Latency (avg):</span> <span id="q-lat">0 ms</span></div>
-                <div class="metric"><span>Jitter:</span> <span id="q-jit">0 ms</span></div>
-                <div class="metric"><span>Packet Loss:</span> <span id="q-loss">0%</span></div>
-            </div>
-        </div>
-    </div>
+        // --- SIP ALG TEST COMPONENT ---
+        const SipAlgTest = () => {
+            const [isRunning, setIsRunning] = useState(false);
+            const [result, setResult] = useState(null);
+            const [error, setError] = useState(null);
+            const wsRef = useRef(null);
 
-    <button id="start-btn" onclick="startTest()">Start Check</button>
-</div>
+            const runAlgTest = () => {
+                setIsRunning(true);
+                setResult(null);
+                setError(null);
 
-<script>
-    let ws;
-    const HOST = window.location.hostname; // Uses the current hostname
-    
-    function updateStatus(id, state, text) {
-        const el = document.getElementById('status-' + id);
-        el.className = 'status ' + state;
-        el.textContent = text;
-    }
-
-    function startTest() {
-        const btn = document.getElementById('start-btn');
-        const selectedPort = document.getElementById('port-select').value;
-        
-        btn.disabled = true;
-        btn.textContent = "Running Tests...";
-        
-        // Get selected port
-        const selectedPort = document.getElementById('port-select').value;
-        
-        // Reset UI
-        ['alg', 'register', 'subscribe', 'notify', 'invite', 'quality'].forEach(id => updateStatus(id, 'pending', 'Running...'));
-        document.getElementById('quality-metrics').style.display = 'none';
-
-        // Connect WS to selected port
-        // Note: Using ws:// for local testing. In production, use wss:// for secure connections
-        ws = new WebSocket(`ws://${HOST}:${selectedPort}`);
-
-        ws.onopen = () => {
-            console.log(`Connected to port ${selectedPort}`);
-            // First, run the ALG test
-            ws.send(JSON.stringify({ 
-                type: 'ALG_TEST', 
-                payload: { 
-                    serverIp: HOST, 
-                    serverPort: 5060 
-                } 
-            }));
-        };
-
-        ws.onerror = (err) => {
-            console.error('WebSocket error:', err);
-            updateStatus('alg', 'error', 'Connection Failed');
-            updateStatus('register', 'error', 'Connection Failed');
-            updateStatus('subscribe', 'error', 'Connection Failed');
-            updateStatus('notify', 'error', 'Connection Failed');
-            updateStatus('invite', 'error', 'Connection Failed');
-            updateStatus('quality', 'error', 'Connection Failed');
-            btn.disabled = false;
-            btn.textContent = "Start Check";
-        };
-
-        ws.onmessage = (event) => {
-            const msg = JSON.parse(event.data);
-            handleServerMessage(msg);
-        };
-    }
-
-    let qualityInterval;
-    let qualityPackets = [];
-    let sentCount = 0;
-    let receivedCount = 0;
-
-    function runSequence() {
-        // Step 1: Register
-        sendSIP('SIP_REGISTER', { uri: 'sip:test@193.105.36.4' });
-
-        // Step 2: Subscribe (triggers Notify)
-        setTimeout(() => {
-            sendSIP('SIP_SUBSCRIBE', { event: 'presence' });
-        }, 1000);
-
-        // Step 3: Invite
-        setTimeout(() => {
-            sendSIP('SIP_INVITE', { to: 'sip:service@193.105.36.4' });
-        }, 3000);
-
-        // Step 4: Start Quality Test after SIP checks
-        setTimeout(() => {
-            startQualityTest();
-        }, 5000);
-    }
-
-    function sendSIP(type, payload) {
-        ws.send(JSON.stringify({ type, payload }));
-    }
-
-    function handleServerMessage(msg) {
-        // Handle ALG test results
-        if (msg.type === 'ALG_RESULT') {
-            if (msg.error) {
-                updateStatus('alg', 'error', `Test failed: ${msg.error}`);
-            } else if (msg.result) {
-                const { udp, tcp, returnCode } = msg.result;
+                // Connect to WebSocket server
+                const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+                const wsUrl = `${protocol}//${window.location.host}`;
                 
-                // Display result based on codes
-                if (returnCode === 2) {
-                    // ALG detected
-                    const udpText = udp.code === 2 ? 'TRUE' : 'FALSE';
-                    const tcpText = tcp.code === 2 ? 'TRUE' : 'FALSE';
-                    updateStatus('alg', 'pending', `ALG DETECTED - UDP: ${udpText}, TCP: ${tcpText}`);
-                } else if (returnCode === 1) {
-                    // No ALG detected
-                    updateStatus('alg', 'success', 'No ALG detected - UDP: FALSE, TCP: FALSE');
-                } else {
-                    // Test failed
-                    const errors = [];
-                    if (udp.error) errors.push(`UDP: ${udp.error}`);
-                    if (tcp.error) errors.push(`TCP: ${tcp.error}`);
-                    updateStatus('alg', 'error', `Test error - ${errors.join(', ')}`);
+                try {
+                    wsRef.current = new WebSocket(wsUrl);
+                    
+                    wsRef.current.onopen = () => {
+                        console.log('[SIP ALG] WebSocket connected');
+                        wsRef.current.send(JSON.stringify({ type: 'ALG_TEST' }));
+                    };
+                    
+                    wsRef.current.onmessage = (event) => {
+                        try {
+                            const data = JSON.parse(event.data);
+                            if (data.type === 'ALG_RESULT') {
+                                setIsRunning(false);
+                                if (data.error) {
+                                    setError(data.error);
+                                } else {
+                                    setResult(data.result);
+                                }
+                                wsRef.current.close();
+                            }
+                        } catch (e) {
+                            console.error('[SIP ALG] Error parsing response:', e);
+                        }
+                    };
+                    
+                    wsRef.current.onerror = (err) => {
+                        console.error('[SIP ALG] WebSocket error:', err);
+                        setError('Connection error. Make sure the server is running.');
+                        setIsRunning(false);
+                    };
+                    
+                    wsRef.current.onclose = () => {
+                        console.log('[SIP ALG] WebSocket closed');
+                    };
+                    
+                    // Timeout after 15 seconds
+                    setTimeout(() => {
+                        if (isRunning) {
+                            setError('Test timed out. Server may be unreachable.');
+                            setIsRunning(false);
+                            if (wsRef.current) wsRef.current.close();
+                        }
+                    }, 15000);
+                    
+                } catch (e) {
+                    setError(`Failed to connect: ${e.message}`);
+                    setIsRunning(false);
                 }
-            }
-            
-            // After processing ALG result, run the existing SIP sequence
-            setTimeout(() => runSequence(), 500);
-            return;
-        }
-        
-        if (msg.type === 'SIP_RESPONSE') {
-            if (msg.step === 'register' && msg.status === 200) updateStatus('register', 'success', '200 OK (Pass)');
-            if (msg.step === 'subscribe' && msg.status === 200) updateStatus('subscribe', 'success', '200 OK (Pass)');
-            if (msg.step === 'invite' && msg.status === 200) updateStatus('invite', 'success', '200 OK (Pass)');
-        } 
-        else if (msg.type === 'SIP_REQUEST') {
-            if (msg.step === 'notify') updateStatus('notify', 'success', 'Received NOTIFY (Pass)');
-        }
-        else if (msg.type === 'PONG') {
-            receivedCount++;
-            const now = Date.now();
-            const rtt = now - msg.clientTimestamp;
-            qualityPackets.push(rtt);
-            updateQualityUI();
-        }
-    }
+            };
 
-    function startQualityTest() {
-        updateStatus('quality', 'pending', 'Testing Connection (30s)...');
-        document.getElementById('quality-metrics').style.display = 'block';
-        
-        sentCount = 0;
-        receivedCount = 0;
-        qualityPackets = [];
-        
-        const startTime = Date.now();
-        
-        qualityInterval = setInterval(() => {
-            if (Date.now() - startTime > 30000) {
-                finishQualityTest();
-                return;
-            }
-            sentCount++;
-            ws.send(JSON.stringify({ type: 'PING', payload: { timestamp: Date.now(), seq: sentCount } }));
-        }, 200); // Send ping every 200ms
-    }
+            const getResultStatus = (code) => {
+                switch (code) {
+                    case 1: return { label: 'No ALG Detected', color: 'text-green-500', icon: CheckCircle, bgColor: 'bg-green-900/20', borderColor: 'border-green-800/50' };
+                    case 2: return { label: 'ALG Detected', color: 'text-red-500', icon: AlertTriangle, bgColor: 'bg-red-900/20', borderColor: 'border-red-800/50' };
+                    case 4: return { label: 'Test Failed', color: 'text-yellow-500', icon: Info, bgColor: 'bg-yellow-900/20', borderColor: 'border-yellow-800/50' };
+                    default: return { label: 'Unknown', color: 'text-slate-500', icon: Info, bgColor: 'bg-slate-900/20', borderColor: 'border-slate-800/50' };
+                }
+            };
 
-    function updateQualityUI() {
-        if (qualityPackets.length === 0) return;
-        
-        const sum = qualityPackets.reduce((a, b) => a + b, 0);
-        const avg = Math.round(sum / qualityPackets.length);
-        
-        // Jitter calculation (avg deviation from mean)
-        let jitterSum = 0;
-        for(let i=0; i < qualityPackets.length - 1; i++) {
-            jitterSum += Math.abs(qualityPackets[i] - qualityPackets[i+1]);
-        }
-        const jitter = qualityPackets.length > 1 ? Math.round(jitterSum / (qualityPackets.length - 1)) : 0;
+            const renderProtocolResult = (protocol, data) => {
+                if (!data) return null;
+                const status = getResultStatus(data.code);
+                const StatusIcon = status.icon;
+                
+                return (
+                    <div className={`p-4 rounded-lg border ${status.bgColor} ${status.borderColor}`}>
+                        <div className="flex items-center justify-between mb-2">
+                            <span className="text-slate-300 font-medium uppercase text-sm">{protocol}</span>
+                            <div className={`flex items-center gap-2 ${status.color}`}>
+                                <StatusIcon className="w-5 h-5" />
+                                <span className="font-semibold">{status.label}</span>
+                            </div>
+                        </div>
+                        {data.error && (
+                            <p className="text-xs text-slate-400 mt-2">{data.error}</p>
+                        )}
+                        {data.diff && (
+                            <div className="mt-3">
+                                <p className="text-xs text-slate-500 mb-1">Differences detected:</p>
+                                <pre className="text-xs bg-slate-900/50 p-2 rounded overflow-x-auto text-slate-300">{data.diff}</pre>
+                            </div>
+                        )}
+                    </div>
+                );
+            };
 
-        document.getElementById('q-sent').textContent = sentCount;
-        document.getElementById('q-lat').textContent = avg + ' ms';
-        document.getElementById('q-jit').textContent = jitter + ' ms';
-    }
+            return (
+                <div className="bg-slate-800 rounded-xl border border-slate-700 p-6 shadow-lg">
+                    <div className="flex items-center gap-3 mb-4">
+                        <Shield className="w-6 h-6 text-purple-500" />
+                        <h2 className="text-xl font-bold text-white">SIP ALG Detection</h2>
+                    </div>
+                    
+                    <p className="text-slate-400 text-sm mb-6">
+                        Tests if your router's SIP Application Layer Gateway (ALG) is modifying SIP packets. 
+                        ALG can cause VoIP issues like one-way audio, dropped calls, or registration failures.
+                    </p>
 
-    function finishQualityTest() {
-        clearInterval(qualityInterval);
-        const loss = sentCount > 0 ? ((sentCount - receivedCount) / sentCount * 100).toFixed(1) : 0;
-        document.getElementById('q-loss').textContent = loss + '%';
-        
-        let resultText = "Pass";
-        let statusClass = "success";
+                    <button
+                        onClick={runAlgTest}
+                        disabled={isRunning}
+                        className={`w-full py-3 px-6 rounded-lg font-semibold transition-all flex items-center justify-center gap-2 ${
+                            isRunning 
+                                ? 'bg-slate-700 text-slate-400 cursor-not-allowed' 
+                                : 'bg-purple-600 hover:bg-purple-500 text-white shadow-lg shadow-purple-900/20'
+                        }`}
+                    >
+                        {isRunning ? (
+                            <>
+                                <RefreshCw className="w-5 h-5 animate-spin" />
+                                Running SIP ALG Test...
+                            </>
+                        ) : (
+                            <>
+                                <Server className="w-5 h-5" />
+                                Run SIP ALG Test
+                            </>
+                        )}
+                    </button>
 
-        // Pass criteria: Loss < 1%, Jitter < 30ms, Latency < 150ms
-        const finalJitter = parseInt(document.getElementById('q-jit').textContent);
-        const finalLat = parseInt(document.getElementById('q-lat').textContent);
-        
-        if (loss > 1 || finalJitter > 30 || finalLat > 150) {
-            resultText = "Low Quality";
-            statusClass = "pending"; // Warning color
-        }
+                    {error && (
+                        <div className="mt-4 p-4 bg-red-900/20 border border-red-800/50 rounded-lg">
+                            <div className="flex items-center gap-2 text-red-400">
+                                <XCircle className="w-5 h-5" />
+                                <span className="font-medium">Error</span>
+                            </div>
+                            <p className="text-sm text-slate-300 mt-2">{error}</p>
+                        </div>
+                    )}
 
-        updateStatus('quality', statusClass, resultText);
-        document.getElementById('start-btn').textContent = "Start Check";
-        document.getElementById('start-btn').disabled = false;
-        
-        const selectedPort = document.getElementById('port-select').value;
-        document.getElementById('current-port').textContent = `Test completed on port ${selectedPort}`;
-        
-        ws.close();
-    }
-</script>
+                    {result && (
+                        <div className="mt-6 space-y-4">
+                            <h3 className="text-white font-semibold">Test Results</h3>
+                            
+                            {/* Overall Status */}
+                            <div className={`p-4 rounded-lg border ${getResultStatus(result.returnCode).bgColor} ${getResultStatus(result.returnCode).borderColor}`}>
+                                <div className="flex items-center gap-3">
+                                    {React.createElement(getResultStatus(result.returnCode).icon, { className: `w-8 h-8 ${getResultStatus(result.returnCode).color}` })}
+                                    <div>
+                                        <div className={`text-2xl font-bold ${getResultStatus(result.returnCode).color}`}>
+                                            {getResultStatus(result.returnCode).label}
+                                        </div>
+                                        <div className="text-sm text-slate-400">Overall Result</div>
+                                    </div>
+                                </div>
+                            </div>
 
+                            {/* Protocol-specific results */}
+                            <div className="grid gap-3">
+                                {renderProtocolResult('UDP', result.udp)}
+                                {renderProtocolResult('TCP', result.tcp)}
+                            </div>
+
+                            {/* Recommendations */}
+                            <div className="mt-4 p-4 bg-blue-900/20 border border-blue-800/50 rounded-lg">
+                                <h4 className="text-blue-400 font-semibold mb-2 flex items-center gap-2">
+                                    <Info className="w-4 h-4" />
+                                    What does this mean?
+                                </h4>
+                                <p className="text-sm text-slate-300 leading-relaxed">
+                                    {result.returnCode === 1 ? (
+                                        "Your router is not modifying SIP packets. This is ideal for VoIP communications."
+                                    ) : result.returnCode === 2 ? (
+                                        "Your router's SIP ALG is actively modifying SIP packets. This can cause VoIP issues. Consider disabling SIP ALG in your router settings."
+                                    ) : (
+                                        "The test could not complete successfully. This may be due to firewall restrictions or network configuration."
+                                    )}
+                                </p>
+                            </div>
+                        </div>
+                    )}
+                </div>
+            );
+        };
+
+        // --- MAIN APP COMPONENT ---
+        const VoIPConnectivityTester = () => {
+            // State
+            const [activeTab, setActiveTab] = useState('voip'); // 'voip' or 'alg'
+            const [isRunning, setIsRunning] = useState(false);
+            const [timeLeft, setTimeLeft] = useState(120);
+            const [showSummary, setShowSummary] = useState(false);
+            const [logs, setLogs] = useState([]);
+            const [stats, setStats] = useState({
+                avgLatency: 0,
+                maxLatency: 0,
+                jitter: 0,
+                packetLoss: 0,
+                mos: 5.0,
+                totalPings: 0,
+                failedPings: 0
+            });
+
+            // Refs
+            const intervalRef = useRef(null);
+            const logsRef = useRef([]);
+
+            // Configuration
+            const PING_INTERVAL = 1000;
+            const TEST_DURATION = 120;
+            const PING_TARGET = "https://www.google.com/favicon.ico";
+
+            const calculateMOS = (avgLatency, jitter, packetLoss) => {
+                const effectiveLatency = avgLatency + (jitter * 2) + 10;
+                let rFactor = 93.2;
+                if (effectiveLatency > 160) {
+                    rFactor -= (effectiveLatency - 160) / 40;
+                }
+                rFactor -= packetLoss * 2.5;
+                if (rFactor < 0) rFactor = 0;
+                let mos = 1 + (0.035 * rFactor) + (rFactor * (rFactor - 60) * (100 - rFactor) * 0.000007);
+                if (mos > 5) mos = 5;
+                if (mos < 1) mos = 1;
+                return mos.toFixed(2);
+            };
+
+            const performPing = async () => {
+                const timestamp = Date.now();
+                const uniqueUrl = `${PING_TARGET}?t=${timestamp}`;
+                const start = performance.now();
+                
+                try {
+                    await fetch(uniqueUrl, { mode: 'no-cors', cache: 'no-store' });
+                    const end = performance.now();
+                    const latency = end - start;
+                    handlePingResult(latency, false);
+                } catch (error) {
+                    handlePingResult(null, true);
+                }
+            };
+
+            const handlePingResult = (latency, isLoss) => {
+                const currentLogs = logsRef.current;
+                let jitter = 0;
+
+                if (!isLoss && currentLogs.length > 0) {
+                    const lastSuccessfulPing = [...currentLogs].reverse().find(l => !l.isLoss);
+                    if (lastSuccessfulPing) {
+                        jitter = Math.abs(latency - lastSuccessfulPing.latency);
+                    }
+                }
+
+                const newLog = {
+                    id: Date.now(),
+                    timestamp: new Date().toLocaleTimeString(),
+                    latency: isLoss ? 0 : latency,
+                    jitter: jitter,
+                    isLoss: isLoss
+                };
+
+                const updatedLogs = [...currentLogs, newLog];
+                logsRef.current = updatedLogs;
+                setLogs(updatedLogs);
+
+                const successfulPings = updatedLogs.filter(l => !l.isLoss);
+                const failedPings = updatedLogs.filter(l => l.isLoss).length;
+                const totalPings = updatedLogs.length;
+
+                const totalLatency = successfulPings.reduce((sum, l) => sum + l.latency, 0);
+                const avgLat = successfulPings.length > 0 ? totalLatency / successfulPings.length : 0;
+                const maxLat = successfulPings.reduce((max, l) => (l.latency > max ? l.latency : max), 0);
+                const totalJitter = successfulPings.reduce((sum, l) => sum + l.jitter, 0);
+                const avgJitter = successfulPings.length > 0 ? totalJitter / successfulPings.length : 0;
+                const lossPercentage = (failedPings / totalPings) * 100;
+
+                setStats({
+                    avgLatency: avgLat,
+                    maxLatency: maxLat,
+                    jitter: avgJitter,
+                    packetLoss: lossPercentage,
+                    totalPings,
+                    failedPings,
+                    mos: calculateMOS(avgLat, avgJitter, lossPercentage)
+                });
+            };
+
+            const startTest = () => {
+                if (isRunning) return;
+                
+                setShowSummary(false);
+                setLogs([]);
+                logsRef.current = [];
+                setStats({
+                    avgLatency: 0,
+                    maxLatency: 0,
+                    jitter: 0,
+                    packetLoss: 0,
+                    mos: 5.0,
+                    totalPings: 0,
+                    failedPings: 0
+                });
+                setTimeLeft(TEST_DURATION);
+                setIsRunning(true);
+
+                intervalRef.current = setInterval(() => {
+                    setTimeLeft((prev) => {
+                        if (prev <= 1) {
+                            stopTest();
+                            setShowSummary(true);
+                            return 0;
+                        }
+                        return prev - 1;
+                    });
+                    performPing();
+                }, PING_INTERVAL);
+            };
+
+            const stopTest = () => {
+                if (intervalRef.current) {
+                    clearInterval(intervalRef.current);
+                    intervalRef.current = null;
+                }
+                setIsRunning(false);
+            };
+
+            const closeSummary = () => {
+                setShowSummary(false);
+            };
+
+            const fmt = (n) => (n ? n.toFixed(1) : '0');
+
+            const getQualityColor = (mos) => {
+                if (mos >= 4.3) return "text-green-500";
+                if (mos >= 4.0) return "text-emerald-400";
+                if (mos >= 3.6) return "text-yellow-400";
+                if (mos >= 3.0) return "text-orange-500";
+                return "text-red-500";
+            };
+
+            const getQualityLabel = (mos) => {
+                if (mos >= 4.3) return "Excellent";
+                if (mos >= 4.0) return "Good";
+                if (mos >= 3.6) return "Fair";
+                if (mos >= 3.0) return "Poor";
+                return "Bad";
+            };
+
+            const getThresholdStatus = (value, type) => {
+                if (type === 'latency') return value < 150 ? 'good' : value < 300 ? 'warn' : 'bad';
+                if (type === 'jitter') return value < 30 ? 'good' : value < 50 ? 'warn' : 'bad';
+                if (type === 'loss') return value < 1 ? 'good' : value < 3 ? 'warn' : 'bad';
+                return 'good';
+            };
+
+            const renderMetricRow = (label, value, unit, type, thresholdText) => {
+                const status = getThresholdStatus(value, type);
+                let StatusIcon = CheckCircle;
+                let colorClass = "text-green-500";
+                
+                if (status === 'warn') {
+                    StatusIcon = AlertTriangle;
+                    colorClass = "text-yellow-500";
+                } else if (status === 'bad') {
+                    StatusIcon = XCircle;
+                    colorClass = "text-red-500";
+                }
+
+                return (
+                    <div className="flex items-center justify-between p-3 bg-slate-700/50 rounded-lg border border-slate-600">
+                        <div>
+                            <div className="text-slate-300 font-medium">{label}</div>
+                            <div className="text-xs text-slate-500">{thresholdText}</div>
+                        </div>
+                        <div className="text-right">
+                            <div className={`text-xl font-bold flex items-center gap-2 justify-end ${colorClass}`}>
+                                {fmt(value)}{unit}
+                                <StatusIcon className="w-5 h-5" />
+                            </div>
+                            <div className="text-xs font-medium uppercase opacity-80" style={{ color: colorClass.replace('text-', '') }}>
+                                {status === 'good' ? 'Pass' : status === 'warn' ? 'Borderline' : 'Fail'}
+                            </div>
+                        </div>
+                    </div>
+                );
+            };
+
+            return (
+                <div className="min-h-screen bg-slate-900 text-slate-200 p-4 md:p-8 font-sans relative">
+                    <div className="max-w-4xl mx-auto">
+                        
+                        {/* Header */}
+                        <div className="mb-8 text-center">
+                            <h1 className="text-3xl font-bold text-white mb-2 flex items-center justify-center gap-3">
+                                <Phone className="w-8 h-8 text-blue-500" />
+                                VoIP & SIP Analyzer
+                            </h1>
+                            <p className="text-slate-400">
+                                Comprehensive telephony diagnostics: connection quality and SIP ALG detection.
+                            </p>
+                        </div>
+
+                        {/* Tab Navigation */}
+                        <div className="flex gap-2 mb-6 bg-slate-800 p-1 rounded-xl border border-slate-700">
+                            <button
+                                onClick={() => setActiveTab('voip')}
+                                className={`flex-1 py-3 px-4 rounded-lg font-semibold transition-all flex items-center justify-center gap-2 ${
+                                    activeTab === 'voip'
+                                        ? 'bg-blue-600 text-white shadow-lg'
+                                        : 'text-slate-400 hover:text-white hover:bg-slate-700'
+                                }`}
+                            >
+                                <Activity className="w-5 h-5" />
+                                Connection Quality
+                            </button>
+                            <button
+                                onClick={() => setActiveTab('alg')}
+                                className={`flex-1 py-3 px-4 rounded-lg font-semibold transition-all flex items-center justify-center gap-2 ${
+                                    activeTab === 'alg'
+                                        ? 'bg-purple-600 text-white shadow-lg'
+                                        : 'text-slate-400 hover:text-white hover:bg-slate-700'
+                                }`}
+                            >
+                                <Shield className="w-5 h-5" />
+                                SIP ALG Check
+                            </button>
+                        </div>
+
+                        {/* SIP ALG Tab Content */}
+                        {activeTab === 'alg' && <SipAlgTest />}
+
+                        {/* VoIP Tab Content */}
+                        {activeTab === 'voip' && (
+                            <>
+                                {/* Controls */}
+                                <div className="bg-slate-800 rounded-xl p-6 shadow-lg mb-6 border border-slate-700 flex flex-col md:flex-row items-center justify-between gap-6">
+                                    <div className="flex items-center gap-4">
+                                        <div className={`relative flex items-center justify-center w-24 h-24 rounded-full border-4 ${isRunning ? 'border-blue-500 animate-pulse' : 'border-slate-600'}`}>
+                                            <div className="text-2xl font-bold text-white">
+                                                {Math.floor(timeLeft / 60)}:{(timeLeft % 60).toString().padStart(2, '0')}
+                                            </div>
+                                            {isRunning && (
+                                                <span className="absolute -top-1 -right-1 flex h-4 w-4">
+                                                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75"></span>
+                                                    <span className="relative inline-flex rounded-full h-4 w-4 bg-blue-500"></span>
+                                                </span>
+                                            )}
+                                        </div>
+                                        <div>
+                                            <h3 className="text-lg font-semibold text-white">Status: {isRunning ? 'Scanning...' : 'Ready'}</h3>
+                                            <p className="text-sm text-slate-400">Duration: 2 Minutes</p>
+                                        </div>
+                                    </div>
+
+                                    <div className="flex gap-3">
+                                        {!isRunning ? (
+                                            <button 
+                                                onClick={startTest}
+                                                className="bg-blue-600 hover:bg-blue-500 text-white font-bold py-3 px-8 rounded-lg transition-all flex items-center gap-2 shadow-lg shadow-blue-900/20"
+                                            >
+                                                <Wifi className="w-5 h-5" />
+                                                Start Test
+                                            </button>
+                                        ) : (
+                                            <button 
+                                                onClick={stopTest}
+                                                className="bg-red-600 hover:bg-red-500 text-white font-bold py-3 px-8 rounded-lg transition-all flex items-center gap-2"
+                                            >
+                                                <WifiOff className="w-5 h-5" />
+                                                Stop
+                                            </button>
+                                        )}
+                                    </div>
+                                </div>
+
+                                {/* Main Metrics Grid */}
+                                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+                                    
+                                    {/* MOS Score */}
+                                    <div className="bg-slate-800 p-5 rounded-xl border border-slate-700 shadow-sm relative overflow-hidden">
+                                        <div className="flex justify-between items-start mb-2">
+                                            <h3 className="text-slate-400 text-sm font-medium uppercase tracking-wider">MOS Score</h3>
+                                            <Info className="w-4 h-4 text-slate-500 cursor-help" title="Mean Opinion Score (1-5). >4.0 is desired for VoIP." />
+                                        </div>
+                                        <div className={`text-4xl font-bold ${getQualityColor(stats.mos)}`}>
+                                            {stats.mos}
+                                        </div>
+                                        <div className="text-sm text-slate-500 mt-1">
+                                            Quality: <span className={getQualityColor(stats.mos)}>{getQualityLabel(stats.mos)}</span>
+                                        </div>
+                                    </div>
+
+                                    {/* Latency */}
+                                    <div className="bg-slate-800 p-5 rounded-xl border border-slate-700 shadow-sm">
+                                        <div className="flex justify-between items-start mb-2">
+                                            <h3 className="text-slate-400 text-sm font-medium uppercase tracking-wider">Avg Latency</h3>
+                                        </div>
+                                        <div className="text-4xl font-bold text-white">
+                                            {fmt(stats.avgLatency)}<span className="text-lg text-slate-500 ml-1">ms</span>
+                                        </div>
+                                        <div className="text-sm text-slate-500 mt-1">
+                                            Max: {fmt(stats.maxLatency)}ms
+                                        </div>
+                                        <div className={`h-1 w-full bg-slate-700 mt-3 rounded-full overflow-hidden`}>
+                                            <div 
+                                                className={`h-full ${stats.avgLatency < 100 ? 'bg-green-500' : stats.avgLatency < 200 ? 'bg-yellow-500' : 'bg-red-500'}`} 
+                                                style={{ width: `${Math.min(stats.avgLatency / 3, 100)}%` }}
+                                            ></div>
+                                        </div>
+                                    </div>
+
+                                    {/* Jitter */}
+                                    <div className="bg-slate-800 p-5 rounded-xl border border-slate-700 shadow-sm">
+                                        <div className="flex justify-between items-start mb-2">
+                                            <h3 className="text-slate-400 text-sm font-medium uppercase tracking-wider">Jitter</h3>
+                                            <Info className="w-4 h-4 text-slate-500 cursor-help" title="Variance in latency. High jitter (>30ms) causes robotic voice." />
+                                        </div>
+                                        <div className="text-4xl font-bold text-white">
+                                            {fmt(stats.jitter)}<span className="text-lg text-slate-500 ml-1">ms</span>
+                                        </div>
+                                        <div className="text-sm text-slate-500 mt-1">
+                                            Target: &lt;30ms
+                                        </div>
+                                        <div className={`h-1 w-full bg-slate-700 mt-3 rounded-full overflow-hidden`}>
+                                            <div 
+                                                className={`h-full ${stats.jitter < 20 ? 'bg-green-500' : stats.jitter < 40 ? 'bg-yellow-500' : 'bg-red-500'}`} 
+                                                style={{ width: `${Math.min(stats.jitter * 2, 100)}%` }}
+                                            ></div>
+                                        </div>
+                                    </div>
+
+                                    {/* Packet Loss */}
+                                    <div className="bg-slate-800 p-5 rounded-xl border border-slate-700 shadow-sm">
+                                        <div className="flex justify-between items-start mb-2">
+                                            <h3 className="text-slate-400 text-sm font-medium uppercase tracking-wider">Est. Loss</h3>
+                                        </div>
+                                        <div className={`text-4xl font-bold ${stats.packetLoss === 0 ? 'text-white' : 'text-red-400'}`}>
+                                            {fmt(stats.packetLoss)}<span className="text-lg text-slate-500 ml-1">%</span>
+                                        </div>
+                                        <div className="text-sm text-slate-500 mt-1">
+                                            {stats.failedPings} / {stats.totalPings} packets
+                                        </div>
+                                    </div>
+                                </div>
+
+                                {/* Visualizer Graph */}
+                                <div className="bg-slate-800 rounded-xl border border-slate-700 shadow-lg p-4 mb-6 overflow-hidden">
+                                    <div className="flex justify-between items-center mb-4 px-2">
+                                        <h3 className="text-white font-semibold flex items-center gap-2">
+                                            <LineChart className="w-4 h-4 text-blue-400" />
+                                            Real-time Latency (ms)
+                                        </h3>
+                                    </div>
+                                    
+                                    <div className="relative h-48 w-full bg-slate-900/50 rounded-lg flex items-end overflow-hidden">
+                                        {logs.length === 0 && (
+                                            <div className="absolute inset-0 flex items-center justify-center text-slate-600">
+                                                Waiting for data...
+                                            </div>
+                                        )}
+                                        <div className="flex items-end h-full w-full gap-[1px]">
+                                            {logs.slice(-60).map((log) => {
+                                                const heightPercent = log.isLoss ? 100 : Math.min((log.latency / 300) * 100, 100);
+                                                return (
+                                                    <div 
+                                                        key={log.id}
+                                                        title={`Latency: ${log.isLoss ? 'LOSS' : Math.round(log.latency)}ms`}
+                                                        className={`flex-1 min-w-[4px] transition-all duration-300 ${log.isLoss ? 'bg-red-500/50' : 'bg-blue-500/60 hover:bg-blue-400'}`}
+                                                        style={{ height: `${Math.max(heightPercent, 5)}%` }}
+                                                    ></div>
+                                                )
+                                            })}
+                                        </div>
+                                        
+                                        <div className="absolute top-[66%] left-0 w-full border-t border-dashed border-slate-700 text-[10px] text-slate-600 pl-1">100ms</div>
+                                        <div className="absolute top-[33%] left-0 w-full border-t border-dashed border-slate-700 text-[10px] text-slate-600 pl-1">200ms</div>
+                                    </div>
+                                </div>
+
+                                {/* Diagnostics Guide */}
+                                <div className="bg-slate-800/50 rounded-xl border border-slate-700 p-6">
+                                    <h3 className="text-white font-semibold mb-4 flex items-center gap-2">
+                                        <CheckCircle className="w-5 h-5 text-green-500" />
+                                        Telephony Requirements
+                                    </h3>
+                                    <div className="grid md:grid-cols-3 gap-6 text-sm">
+                                        <div>
+                                            <span className="block text-slate-400 mb-1">Latency (Ping)</span>
+                                            <div className="text-white mb-1">Target: &lt; 150ms</div>
+                                            <p className="text-slate-500 text-xs">
+                                                High latency causes "talk-over" where people accidentally interrupt each other.
+                                            </p>
+                                        </div>
+                                        <div>
+                                            <span className="block text-slate-400 mb-1">Jitter</span>
+                                            <div className="text-white mb-1">Target: &lt; 30ms</div>
+                                            <p className="text-slate-500 text-xs">
+                                                Jitter is the variation in latency. High jitter causes robotic or "choppy" voice.
+                                            </p>
+                                        </div>
+                                        <div>
+                                            <span className="block text-slate-400 mb-1">Packet Loss</span>
+                                            <div className="text-white mb-1">Target: &lt; 1%</div>
+                                            <p className="text-slate-500 text-xs">
+                                                Even 1% loss cuts out words. 5% makes conversation impossible.
+                                            </p>
+                                        </div>
+                                    </div>
+                                    
+                                    <div className="mt-6 pt-4 border-t border-slate-700">
+                                        <div className="flex items-start gap-3 text-xs text-slate-500 bg-slate-900/50 p-3 rounded">
+                                            <AlertTriangle className="w-5 h-5 text-yellow-600 flex-shrink-0" />
+                                            <p>
+                                                <strong>Note:</strong> This tool uses HTTP (TCP) requests to simulate connectivity. Real VoIP uses UDP. 
+                                                While this is an excellent indicator of general network health, specifically for packet loss and jitter, 
+                                                firewalls might treat this traffic differently than actual SIP/RTP traffic.
+                                            </p>
+                                        </div>
+                                    </div>
+                                </div>
+                            </>
+                        )}
+
+                        {/* Summary Modal Overlay */}
+                        {showSummary && (
+                            <div className="fixed inset-0 bg-slate-900/90 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+                                <div className="bg-slate-800 rounded-2xl border border-slate-700 shadow-2xl max-w-lg w-full overflow-hidden">
+                                    
+                                    {/* Modal Header */}
+                                    <div className="bg-slate-900/50 p-6 border-b border-slate-700 flex justify-between items-center">
+                                        <h2 className="text-2xl font-bold text-white">Analysis Complete</h2>
+                                        <button onClick={closeSummary} className="text-slate-400 hover:text-white transition-colors">
+                                            <XCircle className="w-6 h-6" />
+                                        </button>
+                                    </div>
+
+                                    {/* Modal Body */}
+                                    <div className="p-6 space-y-6">
+                                        
+                                        {/* Main Result */}
+                                        <div className="text-center mb-8">
+                                            <div className="text-sm text-slate-400 uppercase tracking-wider mb-2">Overall VoIP Quality</div>
+                                            <div className={`text-5xl font-bold mb-2 ${getQualityColor(stats.mos)}`}>
+                                                {getQualityLabel(stats.mos)}
+                                            </div>
+                                            <div className="text-slate-500">MOS Score: {stats.mos} / 5.0</div>
+                                        </div>
+
+                                        {/* Detailed Breakdown */}
+                                        <div className="space-y-3">
+                                            {renderMetricRow("Average Latency", stats.avgLatency, "ms", "latency", "Ideal: < 150ms")}
+                                            {renderMetricRow("Average Jitter", stats.jitter, "ms", "jitter", "Ideal: < 30ms")}
+                                            {renderMetricRow("Packet Loss", stats.packetLoss, "%", "loss", "Ideal: < 1%")}
+                                        </div>
+
+                                        {/* Recommendation */}
+                                        <div className="bg-blue-900/20 border border-blue-800/50 rounded-lg p-4 mt-4">
+                                            <h4 className="text-blue-400 font-semibold mb-1 flex items-center gap-2">
+                                                <Info className="w-4 h-4" />
+                                                Recommendation
+                                            </h4>
+                                            <p className="text-sm text-slate-300 leading-relaxed">
+                                                {stats.mos >= 4.0 ? 
+                                                "Your connection is excellent for VoIP calls. You should experience clear audio with no interruptions." :
+                                                stats.mos >= 3.0 ?
+                                                "Your connection is acceptable, but you may experience occasional robotic voice or delays during peak usage." :
+                                                "Your connection is showing signs of instability. Check for WiFi interference or background downloads."
+                                                }
+                                            </p>
+                                        </div>
+
+                                    </div>
+
+                                    {/* Modal Footer */}
+                                    <div className="p-6 border-t border-slate-700 bg-slate-900/30 flex gap-3">
+                                        <button 
+                                            onClick={startTest}
+                                            className="flex-1 bg-blue-600 hover:bg-blue-500 text-white font-semibold py-3 rounded-lg transition-colors flex items-center justify-center gap-2"
+                                        >
+                                            <RefreshCw className="w-4 h-4" />
+                                            Run Again
+                                        </button>
+                                        <button 
+                                            onClick={closeSummary}
+                                            className="flex-1 bg-slate-700 hover:bg-slate-600 text-white font-semibold py-3 rounded-lg transition-colors"
+                                        >
+                                            Close
+                                        </button>
+                                    </div>
+
+                                </div>
+                            </div>
+                        )}
+
+                    </div>
+                </div>
+            );
+        };
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<VoIPConnectivityTester />);
+    </script>
 </body>
 </html>
