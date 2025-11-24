@@ -5,6 +5,7 @@
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
+    "start:pm2": "pm2 start server.js --name simple-sip-alg",
     "test": "echo \"No tests specified\" && exit 0"
   },
   "keywords": [
