@@ -28,15 +28,19 @@
     <h1>SIP ALG & Connectivity Check</h1>
     <p style="text-align:center; color: #777; font-size: 0.9em;">Target: 193.105.36.4 (Ubuntu)</p>
 
-    <div style="text-align:center; margin-bottom: 20px; padding: 15px; background: #f9f9f9; border-radius: 5px;">
-        <label style="font-weight: 600; color: #555; margin-right: 10px;">Test Port:</label>
-        <select id="port-select" style="padding: 8px 15px; border: 1px solid #ddd; border-radius: 4px; font-size: 14px; cursor: pointer;">
-            <option value="5060" selected>5060 (Default SIP)</option>
-            <option value="5062">5062 (Alternative SIP)</option>
+    <div style="margin-bottom: 20px; text-align: center;">
+        <label for="port-select" style="font-weight: 600; color: #555; margin-right: 10px;">Test Port:</label>
+        <select id="port-select" style="padding: 8px 15px; font-size: 14px; border: 2px solid #3498db; border-radius: 5px; background: white; cursor: pointer;">
+            <option value="3000">Port 3000 (HTTP/WebSocket)</option>
+            <option value="5060">Port 5060 (SIP Standard)</option>
+            <option value="5062">Port 5062 (SIP Alternative)</option>
         </select>
-        <span id="current-port" style="margin-left: 15px; color: #3498db; font-weight: 600;"></span>
     </div>
 
+    <div class="status-row">
+        <span class="label">0. SIP ALG Detection (Mirror Test)</span>
+        <span id="status-alg" class="status">Waiting...</span>
+    </div>
     <div class="status-row">
         <span class="label">1. SIP REGISTER</span>
         <span id="status-register" class="status">Waiting...</span>
@@ -73,7 +77,7 @@
 
 <script>
     let ws;
-    const HOST = window.location.hostname; // Get just the hostname
+    const HOST = window.location.hostname; // Uses the current hostname
     
     function updateStatus(id, state, text) {
         const el = document.getElementById('status-' + id);
@@ -88,23 +92,37 @@
         btn.disabled = true;
         btn.textContent = "Running Tests...";
         
-        // Display which port is being tested
-        document.getElementById('current-port').textContent = `Testing on port ${selectedPort}`;
+        // Get selected port
+        const selectedPort = document.getElementById('port-select').value;
         
         // Reset UI
-        ['register', 'subscribe', 'notify', 'invite', 'quality'].forEach(id => updateStatus(id, 'pending', 'Running...'));
+        ['alg', 'register', 'subscribe', 'notify', 'invite', 'quality'].forEach(id => updateStatus(id, 'pending', 'Running...'));
         document.getElementById('quality-metrics').style.display = 'none';
 
-        // Connect WS to the selected port
+        // Connect WS to selected port
+        // Note: Using ws:// for local testing. In production, use wss:// for secure connections
         ws = new WebSocket(`ws://${HOST}:${selectedPort}`);
 
         ws.onopen = () => {
-            runSequence();
+            console.log(`Connected to port ${selectedPort}`);
+            // First, run the ALG test
+            ws.send(JSON.stringify({ 
+                type: 'ALG_TEST', 
+                payload: { 
+                    serverIp: HOST, 
+                    serverPort: 5060 
+                } 
+            }));
         };
 
         ws.onerror = (err) => {
+            console.error('WebSocket error:', err);
+            updateStatus('alg', 'error', 'Connection Failed');
             updateStatus('register', 'error', 'Connection Failed');
-            document.getElementById('current-port').textContent = `Failed to connect to port ${selectedPort}`;
+            updateStatus('subscribe', 'error', 'Connection Failed');
+            updateStatus('notify', 'error', 'Connection Failed');
+            updateStatus('invite', 'error', 'Connection Failed');
+            updateStatus('quality', 'error', 'Connection Failed');
             btn.disabled = false;
             btn.textContent = "Start Check";
         };
@@ -145,6 +163,36 @@
     }
 
     function handleServerMessage(msg) {
+        // Handle ALG test results
+        if (msg.type === 'ALG_RESULT') {
+            if (msg.error) {
+                updateStatus('alg', 'error', `Test failed: ${msg.error}`);
+            } else if (msg.result) {
+                const { udp, tcp, returnCode } = msg.result;
+                
+                // Display result based on codes
+                if (returnCode === 2) {
+                    // ALG detected
+                    const udpText = udp.code === 2 ? 'TRUE' : 'FALSE';
+                    const tcpText = tcp.code === 2 ? 'TRUE' : 'FALSE';
+                    updateStatus('alg', 'pending', `ALG DETECTED - UDP: ${udpText}, TCP: ${tcpText}`);
+                } else if (returnCode === 1) {
+                    // No ALG detected
+                    updateStatus('alg', 'success', 'No ALG detected - UDP: FALSE, TCP: FALSE');
+                } else {
+                    // Test failed
+                    const errors = [];
+                    if (udp.error) errors.push(`UDP: ${udp.error}`);
+                    if (tcp.error) errors.push(`TCP: ${tcp.error}`);
+                    updateStatus('alg', 'error', `Test error - ${errors.join(', ')}`);
+                }
+            }
+            
+            // After processing ALG result, run the existing SIP sequence
+            setTimeout(() => runSequence(), 500);
+            return;
+        }
+        
         if (msg.type === 'SIP_RESPONSE') {
             if (msg.step === 'register' && msg.status === 200) updateStatus('register', 'success', '200 OK (Pass)');
             if (msg.step === 'subscribe' && msg.status === 200) updateStatus('subscribe', 'success', '200 OK (Pass)');
