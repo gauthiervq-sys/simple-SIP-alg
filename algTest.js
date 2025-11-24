@@ -388,7 +388,7 @@ function testTcp(localIp, localPort, serverIp, serverPort, timeout = 10000) {
  * @param {string} options.serverIp - Target server IP
  * @param {number} options.serverPort - Target server port
  * @param {string} options.localIp - Local IP address (default: '0.0.0.0')
- * @param {number} options.localPort - Local port for UDP (default: 5060)
+ * @param {number} options.localPort - Local port for UDP (default: 0, let OS assign)
  * @param {number} options.timeout - Timeout in milliseconds (default: 10000)
  * @returns {Promise<Object>} Test results for UDP and TCP
  */
@@ -397,7 +397,7 @@ async function runAlgTest(options) {
         serverIp,
         serverPort = 5060,
         localIp = '0.0.0.0',
-        localPort = 5060,
+        localPort = 0, // Use 0 to let OS assign a free port
         timeout = 10000
     } = options;
     

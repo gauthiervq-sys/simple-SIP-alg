@@ -66,7 +66,7 @@ function handleMessage(ws, data, clientIp) {
         const testServerIp = (payload && payload.serverIp) || ALG_TEST_IP;
         const testServerPort = (payload && payload.serverPort) || ALG_TEST_PORT;
         const localIp = '0.0.0.0'; // Let OS pick appropriate local address
-        const localPort = 5060;
+        const localPort = 0; // Let OS assign a free port
         
         runAlgTest({
             serverIp: testServerIp,
