@@ -12,6 +12,7 @@ const PORT = 3000;
 const PORT_5060 = 5060;
 const PORT_5062 = 5062;
 const HOST_IP = '193.105.36.4'; // Your WAN IP
+const OPEN_STATE = 1; // WebSocket.OPEN constant value, used for both WebSocket and UDP wrapper
 
 // Serve static frontend files
 app.use(express.static(path.join(__dirname, 'public')));
@@ -50,7 +51,7 @@ function handleMessage(ws, data, clientIp) {
     // Helper to send back to client
     const send = (msgType, content) => {
         // Check if connection is open (works for both WebSocket and UDP wrapper)
-        if (ws.readyState === 1) {
+        if (ws.readyState === OPEN_STATE) {
             ws.send(JSON.stringify({ type: msgType, ...content }));
         }
     };
@@ -156,7 +157,7 @@ let udp5062 = null;
 // Helper function to create a WebSocket-like wrapper for UDP responses
 function createUdpWrapper(socket, rinfo, port) {
     return {
-        readyState: 1, // Simulate OPEN state
+        readyState: OPEN_STATE, // Use same state as WebSocket.OPEN for compatibility
         send: (message) => {
             socket.send(message, rinfo.port, rinfo.address, (err) => {
                 if (err) {
