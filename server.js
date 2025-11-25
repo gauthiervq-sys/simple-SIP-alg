@@ -10,8 +10,10 @@ const server = http.createServer(app);
 const wss3000 = new WebSocket.Server({ server });
 
 const PORT = 3000;
+const WEB_PORT = PORT;
 const PORT_5060 = 5060;
 const PORT_5062 = 5062;
+const SIP_PORTS = [PORT_5060, PORT_5062];
 const HOST_IP = process.env.SIPALG_HOST_IP || '193.105.36.4'; // Your WAN IP
 const ALG_TEST_IP = process.env.SIPALG_TEST_IP || HOST_IP;
 const ALG_TEST_PORT = parseInt(process.env.SIPALG_TEST_PORT || '5060', 10);

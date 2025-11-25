@@ -165,6 +165,7 @@ function testUdp(localIp, localPort, serverIp, serverPort, timeout = 10000) {
         let timeoutHandle;
         let receivedCount = 0;
         const responses = [];
+        let sipData = null; // Store the SIP request data for comparison
         
         const cleanup = () => {
             clearTimeout(timeoutHandle);
@@ -228,6 +229,16 @@ function testUdp(localIp, localPort, serverIp, serverPort, timeout = 10000) {
                         return;
                     }
                     
+                    // Ensure sipData is available for comparison
+                    if (!sipData) {
+                        resolve({
+                            ...RESULT_CODES.FAILED,
+                            error: 'Original SIP request data not available for comparison',
+                            diff: ''
+                        });
+                        return;
+                    }
+                    
                     // Compare original with mirrored
                     const differences = compareSipMessages(sipData.request, mirroredRequest);
                     
@@ -256,7 +267,7 @@ function testUdp(localIp, localPort, serverIp, serverPort, timeout = 10000) {
         // Bind and send
         try {
             socket.bind(localPort, localIp, () => {
-                const sipData = buildSipInvite(localIp, localPort, serverIp, serverPort, 'UDP');
+                sipData = buildSipInvite(localIp, localPort, serverIp, serverPort, 'UDP');
                 const buffer = Buffer.from(sipData.request, 'utf8');
                 
                 socket.send(buffer, 0, buffer.length, serverPort, serverIp, (err) => {
