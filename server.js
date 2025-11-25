@@ -3,6 +3,7 @@ const WebSocket = require('ws');
 const http = require('http');
 const path = require('path');
 const dgram = require('dgram');
+const crypto = require('crypto');
 const { runAlgTest } = require('./algTest');
 
 const app = express();
@@ -223,20 +224,20 @@ function sendUdpError(socket, rinfo, errorMessage) {
 }
 
 // SIP methods that indicate a raw SIP message
-const SIP_METHODS = ['REGISTER', 'INVITE', 'OPTIONS', 'ACK', 'BYE', 'CANCEL', 'SUBSCRIBE', 'NOTIFY', 'REFER', 'MESSAGE', 'INFO', 'PRACK', 'UPDATE'];
+const SIP_METHODS = Object.freeze(new Set(['REGISTER', 'INVITE', 'OPTIONS', 'ACK', 'BYE', 'CANCEL', 'SUBSCRIBE', 'NOTIFY', 'REFER', 'MESSAGE', 'INFO', 'PRACK', 'UPDATE']));
 
 // Helper function to check if a message is a raw SIP message
 function isRawSipMessage(message) {
     const firstLine = message.split('\r\n')[0] || message.split('\n')[0] || '';
     // Check if it starts with a SIP method or is a SIP response (SIP/2.0)
-    return SIP_METHODS.some(method => firstLine.startsWith(method + ' ')) || firstLine.startsWith('SIP/2.0');
+    const method = firstLine.split(' ')[0];
+    return SIP_METHODS.has(method) || firstLine.startsWith('SIP/2.0');
 }
 
 // Helper function to generate a simple SIP 200 OK response
 function generateSipOkResponse(sipRequest, rinfo) {
     const lines = sipRequest.split(/\r\n|\n/);
     const requestLine = lines[0] || '';
-    const method = requestLine.split(' ')[0] || 'UNKNOWN';
     
     // Extract Via, From, To, Call-ID, and CSeq headers
     let via = '';
@@ -246,36 +247,37 @@ function generateSipOkResponse(sipRequest, rinfo) {
     let cseq = '';
     
     for (const line of lines) {
-        if (line.toLowerCase().startsWith('via:')) {
+        const lineLower = line.toLowerCase();
+        if (lineLower.startsWith('via:')) {
             via = line;
-        } else if (line.toLowerCase().startsWith('from:')) {
+        } else if (lineLower.startsWith('from:')) {
             from = line;
-        } else if (line.toLowerCase().startsWith('to:')) {
+        } else if (lineLower.startsWith('to:')) {
             to = line;
             // Add tag if not present
-            if (!to.toLowerCase().includes(';tag=')) {
-                to += `;tag=${Math.random().toString(36).substring(2, 10)}`;
+            if (!lineLower.includes(';tag=')) {
+                to += `;tag=${crypto.randomBytes(6).toString('hex')}`;
             }
-        } else if (line.toLowerCase().startsWith('call-id:')) {
+        } else if (lineLower.startsWith('call-id:')) {
             callId = line;
-        } else if (line.toLowerCase().startsWith('cseq:')) {
+        } else if (lineLower.startsWith('cseq:')) {
             cseq = line;
         }
     }
     
-    const response = [
+    // Build response with required headers and proper SIP format (empty line separates headers from body)
+    const responseHeaders = [
         'SIP/2.0 200 OK',
         via,
         from,
         to,
         callId,
         cseq,
-        'Content-Length: 0',
-        '',
-        ''
-    ].filter(line => line !== '').join('\r\n');
+        'Content-Length: 0'
+    ].filter(line => line !== '');
     
-    return response;
+    // SIP requires CRLF line endings and an empty line before the body
+    return responseHeaders.join('\r\n') + '\r\n\r\n';
 }
 
 // Helper function to setup UDP socket
