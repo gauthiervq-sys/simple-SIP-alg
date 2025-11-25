@@ -149,10 +149,24 @@ SIP_PORTS.forEach(port => {
     
     setupWebSocketHandlers(sipWss, `SIP port ${port}`);
     
+    // Store references for graceful shutdown
+    if (port === PORT_5060) {
+        wss5060 = sipWss;
+    } else if (port === PORT_5062) {
+        wss5062 = sipWss;
+    }
+    
     // Handle errors from the HTTP server
     sipHttpServer.on('error', (err) => {
         if (err.code === 'EADDRINUSE') {
-            console.warn(`⚠ Warning: Port ${port} is already in use (possibly by Asterisk). Skipping this port.`);
+            console.warn(`⚠️  Warning: Port ${port} is already in use`);
+            console.warn(`   This is likely because Asterisk or another service is using this port.`);
+            if (port === PORT_5060) {
+                console.warn(`   Server will continue running on ports ${PORT} and ${PORT_5062}.`);
+                wss5060 = null;
+            } else if (port === PORT_5062) {
+                wss5062 = null;
+            }
         } else {
             console.error(`Error on port ${port}:`, err.message);
         }
@@ -161,7 +175,7 @@ SIP_PORTS.forEach(port => {
     // Handle errors from the WebSocket server
     sipWss.on('error', (err) => {
         if (err.code === 'EADDRINUSE') {
-            console.warn(`⚠ Warning: WebSocket port ${port} is already in use. Skipping this port.`);
+            console.warn(`⚠️  Warning: WebSocket port ${port} is already in use. Skipping this port.`);
         } else {
             console.error(`WebSocket error on port ${port}:`, err.message);
         }
@@ -173,51 +187,9 @@ SIP_PORTS.forEach(port => {
             console.log(`Test connection: ws://${HOST_IP}:${port}`);
         });
     } catch (err) {
-        console.warn(`⚠ Warning: Could not start server on port ${port}: ${err.message}`);
+        console.warn(`⚠️  Warning: Could not start server on port ${port}: ${err.message}`);
     }
 });
-
-// Try to create WebSocket server on port 5060
-try {
-    wss5060 = new WebSocket.Server({ port: PORT_5060, host: '0.0.0.0' });
-    
-    wss5060.on('error', (error) => {
-        if (error.code === 'EADDRINUSE') {
-            console.warn(`⚠️  Warning: Port ${PORT_5060} is already in use`);
-            console.warn(`   This is likely because Asterisk or another service is using this port.`);
-            console.warn(`   Server will continue running on ports ${PORT} and ${PORT_5062}.`);
-        } else {
-            console.warn(`⚠️  Warning: WebSocket server error on port ${PORT_5060}: ${error.message}`);
-        }
-        wss5060 = null;
-    });
-    
-    setupWebSocketHandlers(wss5060, PORT_5060);
-    console.log(`WebSocket server running on port ${PORT_5060}`);
-} catch (error) {
-    console.warn(`⚠️  Warning: Could not start WebSocket server on port ${PORT_5060}`);
-    console.warn(`   Error: ${error.message}`);
-}
-
-// Create WebSocket server on port 5062
-try {
-    wss5062 = new WebSocket.Server({ port: PORT_5062, host: '0.0.0.0' });
-    
-    wss5062.on('error', (error) => {
-        if (error.code === 'EADDRINUSE') {
-            console.error(`❌ Error: Port ${PORT_5062} is already in use`);
-        } else {
-            console.error(`❌ Error: WebSocket server error on port ${PORT_5062}: ${error.message}`);
-        }
-        wss5062 = null;
-    });
-    
-    setupWebSocketHandlers(wss5062, PORT_5062);
-    console.log(`WebSocket server running on port ${PORT_5062}`);
-} catch (error) {
-    console.error(`❌ Error: Could not start WebSocket server on port ${PORT_5062}`);
-    console.error(`   Error: ${error.message}`);
-}
 
 // Create UDP sockets for ports 5060 and 5062
 let udp5060 = null;
@@ -250,6 +222,62 @@ function sendUdpError(socket, rinfo, errorMessage) {
     });
 }
 
+// SIP methods that indicate a raw SIP message
+const SIP_METHODS = ['REGISTER', 'INVITE', 'OPTIONS', 'ACK', 'BYE', 'CANCEL', 'SUBSCRIBE', 'NOTIFY', 'REFER', 'MESSAGE', 'INFO', 'PRACK', 'UPDATE'];
+
+// Helper function to check if a message is a raw SIP message
+function isRawSipMessage(message) {
+    const firstLine = message.split('\r\n')[0] || message.split('\n')[0] || '';
+    // Check if it starts with a SIP method or is a SIP response (SIP/2.0)
+    return SIP_METHODS.some(method => firstLine.startsWith(method + ' ')) || firstLine.startsWith('SIP/2.0');
+}
+
+// Helper function to generate a simple SIP 200 OK response
+function generateSipOkResponse(sipRequest, rinfo) {
+    const lines = sipRequest.split(/\r\n|\n/);
+    const requestLine = lines[0] || '';
+    const method = requestLine.split(' ')[0] || 'UNKNOWN';
+    
+    // Extract Via, From, To, Call-ID, and CSeq headers
+    let via = '';
+    let from = '';
+    let to = '';
+    let callId = '';
+    let cseq = '';
+    
+    for (const line of lines) {
+        if (line.toLowerCase().startsWith('via:')) {
+            via = line;
+        } else if (line.toLowerCase().startsWith('from:')) {
+            from = line;
+        } else if (line.toLowerCase().startsWith('to:')) {
+            to = line;
+            // Add tag if not present
+            if (!to.toLowerCase().includes(';tag=')) {
+                to += `;tag=${Math.random().toString(36).substring(2, 10)}`;
+            }
+        } else if (line.toLowerCase().startsWith('call-id:')) {
+            callId = line;
+        } else if (line.toLowerCase().startsWith('cseq:')) {
+            cseq = line;
+        }
+    }
+    
+    const response = [
+        'SIP/2.0 200 OK',
+        via,
+        from,
+        to,
+        callId,
+        cseq,
+        'Content-Length: 0',
+        '',
+        ''
+    ].filter(line => line !== '').join('\r\n');
+    
+    return response;
+}
+
 // Helper function to setup UDP socket
 function setupUdpServer(port, isSecondary = false) {
     const udpSocket = dgram.createSocket('udp4');
@@ -269,14 +297,35 @@ function setupUdpServer(port, isSecondary = false) {
     });
     
     udpSocket.on('message', (msg, rinfo) => {
+        const messageStr = msg.toString('utf8');
         console.log(`[UDP ${port}] Received message from ${rinfo.address}:${rinfo.port}`);
+        
+        // Check if this is a raw SIP message
+        if (isRawSipMessage(messageStr)) {
+            const firstLine = messageStr.split(/\r\n|\n/)[0] || '';
+            const method = firstLine.split(' ')[0] || 'UNKNOWN';
+            console.log(`[UDP ${port}] Received raw SIP ${method} message`);
+            
+            // Send a simple SIP 200 OK response
+            const response = generateSipOkResponse(messageStr, rinfo);
+            udpSocket.send(response, rinfo.port, rinfo.address, (err) => {
+                if (err) {
+                    console.error(`[UDP ${port}] Error sending SIP response:`, err);
+                } else {
+                    console.log(`[UDP ${port}] Sent SIP 200 OK response to ${rinfo.address}:${rinfo.port}`);
+                }
+            });
+            return;
+        }
+        
+        // Try to parse as JSON
         try {
-            const data = JSON.parse(msg.toString());
+            const data = JSON.parse(messageStr);
             const udpWrapper = createUdpWrapper(udpSocket, rinfo, port);
             handleMessage(udpWrapper, data, rinfo.address);
         } catch (e) {
-            console.error(`[UDP ${port}] Invalid JSON received:`, e.message);
-            sendUdpError(udpSocket, rinfo, 'Invalid JSON format');
+            console.error(`[UDP ${port}] Invalid message format (not JSON or SIP):`, e.message);
+            sendUdpError(udpSocket, rinfo, 'Invalid message format');
         }
     });
     
