@@ -329,7 +329,7 @@
                     type: 'PING',
                     payload: {
                         timestamp: seq,
-                        seq: seq
+                        seq: seq // server uses seq for tracking
                     }
                 }));
             };
@@ -405,7 +405,7 @@
                         wsRef.current.onmessage = (event) => {
                             try {
                                 const data = JSON.parse(event.data);
-                                if (data.type === 'PONG') {
+                                if (data.type === 'PONG' && data.seq != null) {
                                     const seq = data.seq;
                                     const pendingPing = pendingPingsRef.current.get(seq);
                                     
@@ -668,7 +668,7 @@
                                         </div>
                                         <div>
                                             <h3 className="text-lg font-semibold text-white">Status: {isRunning ? 'Scanning...' : 'Ready'}</h3>
-                                            <p className="text-sm text-slate-400">Duration: 2 Minutes • Mode: {testMode === 'http' ? 'HTTP' : 'WebSocket'}</p>
+                                            <p className="text-sm text-slate-400">Duration: {Math.floor(TEST_DURATION / 60)} Minutes • Mode: {testMode === 'http' ? 'HTTP' : 'WebSocket'}</p>
                                         </div>
                                     </div>
 
