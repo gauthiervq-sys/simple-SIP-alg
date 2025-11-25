@@ -252,6 +252,7 @@
             const [timeLeft, setTimeLeft] = useState(120);
             const [showSummary, setShowSummary] = useState(false);
             const [logs, setLogs] = useState([]);
+            const [testMode, setTestMode] = useState('http'); // 'http' or 'websocket'
             const [stats, setStats] = useState({
                 avgLatency: 0,
                 maxLatency: 0,
@@ -265,11 +266,14 @@
             // Refs
             const intervalRef = useRef(null);
             const logsRef = useRef([]);
+            const wsRef = useRef(null);
+            const pendingPingsRef = useRef(new Map()); // Track pending pings for WebSocket mode
 
             // Configuration
             const PING_INTERVAL = 1000;
             const TEST_DURATION = 120;
             const PING_TARGET = "https://www.google.com/favicon.ico";
+            const PING_TIMEOUT = 3000; // 3 second timeout for WebSocket pings
 
             const calculateMOS = (avgLatency, jitter, packetLoss) => {
                 const effectiveLatency = avgLatency + (jitter * 2) + 10;
@@ -285,7 +289,8 @@
                 return mos.toFixed(2);
             };
 
-            const performPing = async () => {
+            // HTTP-based ping (original method)
+            const performHttpPing = async () => {
                 const timestamp = Date.now();
                 const uniqueUrl = `${PING_TARGET}?t=${timestamp}`;
                 const start = performance.now();
@@ -297,6 +302,44 @@
                     handlePingResult(latency, false);
                 } catch (error) {
                     handlePingResult(null, true);
+                }
+            };
+
+            // WebSocket-based ping (simulates UDP behavior)
+            const performWsPing = () => {
+                if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) {
+                    handlePingResult(null, true);
+                    return;
+                }
+
+                const seq = Date.now();
+                const start = performance.now();
+                
+                // Set up timeout for this ping
+                const timeoutId = setTimeout(() => {
+                    if (pendingPingsRef.current.has(seq)) {
+                        pendingPingsRef.current.delete(seq);
+                        handlePingResult(null, true);
+                    }
+                }, PING_TIMEOUT);
+                
+                pendingPingsRef.current.set(seq, { start, timeoutId });
+                
+                wsRef.current.send(JSON.stringify({
+                    type: 'PING',
+                    payload: {
+                        timestamp: seq,
+                        seq: seq // server uses seq for tracking
+                    }
+                }));
+            };
+
+            // Choose ping method based on test mode
+            const performPing = () => {
+                if (testMode === 'websocket') {
+                    performWsPing();
+                } else {
+                    performHttpPing();
                 }
             };
 
@@ -345,12 +388,69 @@
                 });
             };
 
-            const startTest = () => {
+            // Setup WebSocket connection for quality testing
+            const setupWebSocket = () => {
+                return new Promise((resolve, reject) => {
+                    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+                    const wsUrl = `${protocol}//${window.location.host}`;
+                    
+                    try {
+                        wsRef.current = new WebSocket(wsUrl);
+                        
+                        wsRef.current.onopen = () => {
+                            console.log('[Quality Test] WebSocket connected');
+                            resolve();
+                        };
+                        
+                        wsRef.current.onmessage = (event) => {
+                            try {
+                                const data = JSON.parse(event.data);
+                                if (data.type === 'PONG' && data.seq != null) {
+                                    const seq = data.seq;
+                                    const pendingPing = pendingPingsRef.current.get(seq);
+                                    
+                                    if (pendingPing) {
+                                        clearTimeout(pendingPing.timeoutId);
+                                        const end = performance.now();
+                                        const latency = end - pendingPing.start;
+                                        pendingPingsRef.current.delete(seq);
+                                        handlePingResult(latency, false);
+                                    }
+                                }
+                            } catch (e) {
+                                console.error('[Quality Test] Error parsing response:', e);
+                            }
+                        };
+                        
+                        wsRef.current.onerror = (err) => {
+                            console.error('[Quality Test] WebSocket error:', err);
+                            reject(new Error('WebSocket connection failed'));
+                        };
+                        
+                        wsRef.current.onclose = () => {
+                            console.log('[Quality Test] WebSocket closed');
+                        };
+                        
+                        // Timeout for connection
+                        setTimeout(() => {
+                            if (wsRef.current && wsRef.current.readyState !== WebSocket.OPEN) {
+                                reject(new Error('WebSocket connection timeout'));
+                            }
+                        }, 5000);
+                        
+                    } catch (e) {
+                        reject(e);
+                    }
+                });
+            };
+
+            const startTest = async () => {
                 if (isRunning) return;
                 
                 setShowSummary(false);
                 setLogs([]);
                 logsRef.current = [];
+                pendingPingsRef.current.clear();
                 setStats({
                     avgLatency: 0,
                     maxLatency: 0,
@@ -361,6 +461,18 @@
                     failedPings: 0
                 });
                 setTimeLeft(TEST_DURATION);
+
+                // Setup WebSocket for websocket mode
+                if (testMode === 'websocket') {
+                    try {
+                        await setupWebSocket();
+                    } catch (error) {
+                        console.error('[Quality Test] Failed to setup WebSocket:', error);
+                        alert('Failed to connect to server. Please make sure the server is running.');
+                        return;
+                    }
+                }
+
                 setIsRunning(true);
 
                 intervalRef.current = setInterval(() => {
@@ -381,6 +493,15 @@
                     clearInterval(intervalRef.current);
                     intervalRef.current = null;
                 }
+                // Close WebSocket connection if open
+                if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+                    wsRef.current.close();
+                }
+                // Clear pending pings
+                pendingPingsRef.current.forEach((ping) => {
+                    clearTimeout(ping.timeoutId);
+                });
+                pendingPingsRef.current.clear();
                 setIsRunning(false);
             };
 
@@ -492,6 +613,45 @@
                         {/* VoIP Tab Content */}
                         {activeTab === 'voip' && (
                             <>
+                                {/* Test Mode Selector */}
+                                <div className="bg-slate-800 rounded-xl p-4 shadow-lg mb-4 border border-slate-700">
+                                    <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+                                        <div>
+                                            <h3 className="text-white font-semibold mb-1">Test Method</h3>
+                                            <p className="text-xs text-slate-400">Choose how to measure connection quality</p>
+                                        </div>
+                                        <div className="flex gap-2 bg-slate-900/50 p-1 rounded-lg">
+                                            <button
+                                                onClick={() => !isRunning && setTestMode('http')}
+                                                disabled={isRunning}
+                                                className={`py-2 px-4 rounded-md text-sm font-medium transition-all ${
+                                                    testMode === 'http'
+                                                        ? 'bg-blue-600 text-white'
+                                                        : 'text-slate-400 hover:text-white'
+                                                } ${isRunning ? 'opacity-50 cursor-not-allowed' : ''}`}
+                                            >
+                                                HTTP (TCP)
+                                            </button>
+                                            <button
+                                                onClick={() => !isRunning && setTestMode('websocket')}
+                                                disabled={isRunning}
+                                                className={`py-2 px-4 rounded-md text-sm font-medium transition-all ${
+                                                    testMode === 'websocket'
+                                                        ? 'bg-green-600 text-white'
+                                                        : 'text-slate-400 hover:text-white'
+                                                } ${isRunning ? 'opacity-50 cursor-not-allowed' : ''}`}
+                                            >
+                                                WebSocket (Simulated UDP)
+                                            </button>
+                                        </div>
+                                    </div>
+                                    <p className="text-xs text-slate-500 mt-3">
+                                        {testMode === 'http' 
+                                            ? '📡 HTTP mode uses TCP requests to external servers. Good for general internet quality testing.'
+                                            : '🔌 WebSocket mode tests the connection to this server using a ping/pong protocol similar to UDP-based VoIP traffic.'}
+                                    </p>
+                                </div>
+
                                 {/* Controls */}
                                 <div className="bg-slate-800 rounded-xl p-6 shadow-lg mb-6 border border-slate-700 flex flex-col md:flex-row items-center justify-between gap-6">
                                     <div className="flex items-center gap-4">
@@ -508,7 +668,7 @@
                                         </div>
                                         <div>
                                             <h3 className="text-lg font-semibold text-white">Status: {isRunning ? 'Scanning...' : 'Ready'}</h3>
-                                            <p className="text-sm text-slate-400">Duration: 2 Minutes</p>
+                                            <p className="text-sm text-slate-400">Duration: {Math.floor(TEST_DURATION / 60)} Minutes • Mode: {testMode === 'http' ? 'HTTP' : 'WebSocket'}</p>
                                         </div>
                                     </div>
 
@@ -671,9 +831,9 @@
                                         <div className="flex items-start gap-3 text-xs text-slate-500 bg-slate-900/50 p-3 rounded">
                                             <AlertTriangle className="w-5 h-5 text-yellow-600 flex-shrink-0" />
                                             <p>
-                                                <strong>Note:</strong> This tool uses HTTP (TCP) requests to simulate connectivity. Real VoIP uses UDP. 
-                                                While this is an excellent indicator of general network health, specifically for packet loss and jitter, 
-                                                firewalls might treat this traffic differently than actual SIP/RTP traffic.
+                                                <strong>Note:</strong> {testMode === 'http' 
+                                                    ? 'HTTP mode uses TCP requests to external servers. Real VoIP uses UDP. While this is an excellent indicator of general network health, firewalls might treat this traffic differently than actual SIP/RTP traffic.'
+                                                    : 'WebSocket mode uses a persistent connection to this server with ping/pong messages that simulate UDP-like behavior. This provides a more realistic VoIP quality test when testing against your telephony server.'}
                                             </p>
                                         </div>
                                     </div>
