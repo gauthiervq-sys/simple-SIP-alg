@@ -6,19 +6,22 @@ const path = require('path');
 const nodeModulesPath = path.join(__dirname, 'node_modules');
 const packageJsonPath = path.join(__dirname, 'package.json');
 
-// Check if node_modules exists and has content
+// Check if dependencies need to be installed or are incomplete
 function needsInstall() {
     if (!fs.existsSync(nodeModulesPath)) {
         return true;
     }
     
-    // Check if key dependencies exist
+    // Validate that key dependencies can be loaded
     try {
         const packageJson = JSON.parse(fs.readFileSync(packageJsonPath, 'utf8'));
         if (packageJson.dependencies) {
             for (const dep of Object.keys(packageJson.dependencies)) {
-                const depPath = path.join(nodeModulesPath, dep);
-                if (!fs.existsSync(depPath)) {
+                try {
+                    // Use require.resolve to verify the package can be loaded
+                    require.resolve(dep, { paths: [__dirname] });
+                } catch (e) {
+                    // Dependency missing or corrupted
                     return true;
                 }
             }
@@ -36,6 +39,7 @@ if (needsInstall()) {
     console.log('Dependencies not found or incomplete. Installing...');
     try {
         // Use execSync with shell:true to let Node.js choose appropriate shell
+        // This is safe because we're executing in the project directory with a fixed command
         execSync('npm install', { 
             stdio: 'inherit', 
             cwd: __dirname,
