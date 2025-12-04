@@ -13,14 +13,20 @@ function needsInstall() {
     }
     
     // Check if key dependencies exist
-    const packageJson = JSON.parse(fs.readFileSync(packageJsonPath, 'utf8'));
-    if (packageJson.dependencies) {
-        for (const dep of Object.keys(packageJson.dependencies)) {
-            const depPath = path.join(nodeModulesPath, dep);
-            if (!fs.existsSync(depPath)) {
-                return true;
+    try {
+        const packageJson = JSON.parse(fs.readFileSync(packageJsonPath, 'utf8'));
+        if (packageJson.dependencies) {
+            for (const dep of Object.keys(packageJson.dependencies)) {
+                const depPath = path.join(nodeModulesPath, dep);
+                if (!fs.existsSync(depPath)) {
+                    return true;
+                }
             }
         }
+    } catch (error) {
+        console.error('Error reading package.json:', error.message);
+        console.error('Please ensure package.json exists and is valid JSON.');
+        process.exit(1);
     }
     
     return false;
@@ -29,11 +35,11 @@ function needsInstall() {
 if (needsInstall()) {
     console.log('Dependencies not found or incomplete. Installing...');
     try {
-        // Use execSync with explicit cwd for security
+        // Use execSync with shell:true to let Node.js choose appropriate shell
         execSync('npm install', { 
             stdio: 'inherit', 
             cwd: __dirname,
-            shell: process.platform === 'win32' ? 'cmd.exe' : '/bin/sh'
+            shell: true
         });
         console.log('Dependencies installed successfully.');
     } catch (error) {
