@@ -163,8 +163,6 @@ function testUdp(localIp, localPort, serverIp, serverPort, timeout = 10000) {
     return new Promise((resolve) => {
         const socket = dgram.createSocket('udp4');
         let timeoutHandle;
-        let receivedCount = 0;
-        const responses = [];
         let sipData = null; // Store the SIP request data for comparison
         
         const cleanup = () => {
@@ -178,7 +176,9 @@ function testUdp(localIp, localPort, serverIp, serverPort, timeout = 10000) {
             resolve({
                 ...RESULT_CODES.FAILED,
                 error: 'Timeout waiting for server response',
-                diff: ''
+                diff: '',
+                port: serverPort,
+                transport: 'udp'
             });
         }, timeout);
         
@@ -188,7 +188,9 @@ function testUdp(localIp, localPort, serverIp, serverPort, timeout = 10000) {
             resolve({
                 ...RESULT_CODES.FAILED,
                 error: `Socket error: ${err.message}`,
-                diff: ''
+                diff: '',
+                port: serverPort,
+                transport: 'udp'
             });
         });
         
@@ -196,70 +198,63 @@ function testUdp(localIp, localPort, serverIp, serverPort, timeout = 10000) {
         socket.on('message', (msg, rinfo) => {
             try {
                 const response = msg.toString('utf8');
-                responses.push(response);
-                receivedCount++;
                 
-                // We expect 2 responses from the sip-alg-detector daemon
-                if (receivedCount >= 2) {
-                    cleanup();
-                    
-                    // Try to extract and decode the mirrored request from responses
-                    // The sip-alg-detector daemon sends the mirrored request in Base64-encoded bodies
-                    let mirroredRequest = '';
-                    
-                    for (const resp of responses) {
-                        // Look for Base64 content in the SIP response body
-                        const bodyMatch = resp.match(/\r\n\r\n(.+)$/s);
-                        if (bodyMatch && bodyMatch[1]) {
-                            try {
-                                const decoded = Buffer.from(bodyMatch[1].trim(), 'base64').toString('utf8');
-                                mirroredRequest += decoded;
-                            } catch (e) {
-                                // Not valid Base64, might be regular response
-                            }
-                        }
-                    }
-                    
-                    if (!mirroredRequest) {
-                        resolve({
-                            ...RESULT_CODES.FAILED,
-                            error: 'Could not extract mirrored request from server responses',
-                            diff: ''
-                        });
-                        return;
-                    }
-                    
-                    // Ensure sipData is available for comparison
-                    if (!sipData) {
-                        resolve({
-                            ...RESULT_CODES.FAILED,
-                            error: 'Original SIP request data not available for comparison',
-                            diff: ''
-                        });
-                        return;
-                    }
-                    
-                    // Compare original with mirrored
-                    const differences = compareSipMessages(sipData.request, mirroredRequest);
-                    
-                    if (differences.length === 0) {
-                        resolve({
-                            ...RESULT_CODES.FALSE,
-                            diff: ''
-                        });
-                    } else {
-                        resolve({
-                            ...RESULT_CODES.TRUE,
-                            diff: createDiffSnippet(differences)
-                        });
-                    }
+                cleanup();
+                
+                // The test server echoes back the received request in the body
+                // Extract body from SIP 200 OK response
+                const bodyMatch = response.match(/\r\n\r\n(.+)$/s);
+                if (!bodyMatch || !bodyMatch[1]) {
+                    resolve({
+                        ...RESULT_CODES.FAILED,
+                        error: 'Could not extract mirrored request from server response',
+                        diff: '',
+                        port: serverPort,
+                        transport: 'udp'
+                    });
+                    return;
+                }
+                
+                const mirroredRequest = bodyMatch[1].trim();
+                
+                // Ensure sipData is available for comparison
+                if (!sipData) {
+                    resolve({
+                        ...RESULT_CODES.FAILED,
+                        error: 'Original SIP request data not available for comparison',
+                        diff: '',
+                        port: serverPort,
+                        transport: 'udp'
+                    });
+                    return;
+                }
+                
+                // Compare original with mirrored
+                const differences = compareSipMessages(sipData.request, mirroredRequest);
+                
+                if (differences.length === 0) {
+                    resolve({
+                        ...RESULT_CODES.FALSE,
+                        diff: '',
+                        port: serverPort,
+                        transport: 'udp'
+                    });
+                } else {
+                    resolve({
+                        ...RESULT_CODES.TRUE,
+                        diff: createDiffSnippet(differences),
+                        port: serverPort,
+                        transport: 'udp'
+                    });
                 }
             } catch (err) {
                 cleanup();
                 resolve({
                     ...RESULT_CODES.FAILED,
                     error: `Error processing response: ${err.message}`,
-                    diff: ''
+                    diff: '',
+                    port: serverPort,
+                    transport: 'udp'
                 });
             }
         });
@@ -276,7 +271,9 @@ function testUdp(localIp, localPort, serverIp, serverPort, timeout = 10000) {
                         resolve({
                             ...RESULT_CODES.FAILED,
                             error: `Failed to send request: ${err.message}`,
-                            diff: ''
+                            diff: '',
+                            port: serverPort,
+                            transport: 'udp'
                         });
                     }
                 });
@@ -286,21 +283,22 @@ function testUdp(localIp, localPort, serverIp, serverPort, timeout = 10000) {
             resolve({
                 ...RESULT_CODES.FAILED,
                 error: `Failed to bind socket: ${err.message}`,
-                diff: ''
+                diff: '',
+                port: serverPort,
+                transport: 'udp'
             });
         }
     });
 }
 
 /**
- * Test ALG detection over TCP
+ * Test ALG detection over TCP  
  */
 function testTcp(localIp, localPort, serverIp, serverPort, timeout = 10000) {
     return new Promise((resolve) => {
         const socket = new net.Socket();
         let timeoutHandle;
         let receivedData = '';
-        let responseCount = 0;
         
         const cleanup = () => {
             clearTimeout(timeoutHandle);
@@ -313,7 +311,9 @@ function testTcp(localIp, localPort, serverIp, serverPort, timeout = 10000) {
             resolve({
                 ...RESULT_CODES.FAILED,
                 error: 'Timeout waiting for server response',
-                diff: ''
+                diff: '',
+                port: serverPort,
+                transport: 'tcp'
             });
         }, timeout);
         
@@ -323,7 +323,9 @@ function testTcp(localIp, localPort, serverIp, serverPort, timeout = 10000) {
             resolve({
                 ...RESULT_CODES.FAILED,
                 error: `Socket error: ${err.message}`,
-                diff: ''
+                diff: '',
+                port: serverPort,
+                transport: 'tcp'
             });
         });
         
@@ -334,39 +336,24 @@ function testTcp(localIp, localPort, serverIp, serverPort, timeout = 10000) {
         socket.on('data', (data) => {
             receivedData += data.toString('utf8');
             
-            // Count complete SIP messages (separated by \r\n\r\n)
-            const messages = receivedData.split('\r\n\r\n\r\n');
-            responseCount = messages.length - 1; // Last element might be incomplete
-            
-            // We expect 2 responses from the sip-alg-detector daemon
-            if (responseCount >= 2) {
+            // Check if we have a complete response (ends with \r\n\r\n or has body)
+            if (receivedData.includes('\r\n\r\n')) {
                 cleanup();
                 
-                // Try to extract and decode the mirrored request from responses
-                let mirroredRequest = '';
-                
-                for (let i = 0; i < responseCount; i++) {
-                    const resp = messages[i];
-                    // Look for Base64 content in the SIP response body
-                    const bodyMatch = resp.match(/\r\n\r\n(.+)$/s);
-                    if (bodyMatch && bodyMatch[1]) {
-                        try {
-                            const decoded = Buffer.from(bodyMatch[1].trim(), 'base64').toString('utf8');
-                            mirroredRequest += decoded;
-                        } catch (e) {
-                            // Not valid Base64, might be regular response
-                        }
-                    }
-                }
-                
-                if (!mirroredRequest) {
+                // Extract body from SIP 200 OK response
+                const bodyMatch = receivedData.match(/\r\n\r\n(.+)$/s);
+                if (!bodyMatch || !bodyMatch[1]) {
                     resolve({
                         ...RESULT_CODES.FAILED,
-                        error: 'Could not extract mirrored request from server responses',
-                        diff: ''
+                        error: 'Could not extract mirrored request from server response',
+                        diff: '',
+                        port: serverPort,
+                        transport: 'tcp'
                     });
                     return;
                 }
+                
+                const mirroredRequest = bodyMatch[1].trim();
                 
                 // Compare original with mirrored
                 const differences = compareSipMessages(sipData.request, mirroredRequest);
@@ -374,12 +361,16 @@ function testTcp(localIp, localPort, serverIp, serverPort, timeout = 10000) {
                 if (differences.length === 0) {
                     resolve({
                         ...RESULT_CODES.FALSE,
-                        diff: ''
+                        diff: '',
+                        port: serverPort,
+                        transport: 'tcp'
                     });
                 } else {
                     resolve({
                         ...RESULT_CODES.TRUE,
-                        diff: createDiffSnippet(differences)
+                        diff: createDiffSnippet(differences),
+                        port: serverPort,
+                        transport: 'tcp'
                     });
                 }
             }
@@ -393,51 +384,80 @@ function testTcp(localIp, localPort, serverIp, serverPort, timeout = 10000) {
 }
 
 /**
- * Run ALG test for both UDP and TCP
+ * Run ALG test for both UDP and TCP on multiple ports
  * 
  * @param {Object} options - Test options
  * @param {string} options.serverIp - Target server IP
- * @param {number} options.serverPort - Target server port
+ * @param {Array<number>} options.serverPorts - Target server ports (default: [5060, 5062])
  * @param {string} options.localIp - Local IP address (default: '0.0.0.0')
  * @param {number} options.localPort - Local port for UDP (default: 0, let OS assign)
  * @param {number} options.timeout - Timeout in milliseconds (default: 10000)
- * @returns {Promise<Object>} Test results for UDP and TCP
+ * @returns {Promise<Object>} Test results for UDP and TCP on each port
  */
 async function runAlgTest(options) {
     const {
         serverIp,
-        serverPort = 5060,
+        serverPorts = [5060, 5062],
         localIp = '0.0.0.0',
         localPort = 0, // Use 0 to let OS assign a free port
         timeout = 10000
     } = options;
     
-    console.log(`[ALG Test] Starting test to ${serverIp}:${serverPort}`);
+    console.log(`[ALG Test] Starting test to ${serverIp} on ports ${serverPorts.join(', ')}`);
     
     try {
-        // Run both tests in parallel
-        const [udpResult, tcpResult] = await Promise.all([
-            testUdp(localIp, localPort, serverIp, serverPort, timeout),
-            testTcp(localIp, 0, serverIp, serverPort, timeout) // Use 0 for TCP to let OS assign port
-        ]);
+        // Test all ports
+        const allTests = [];
+        for (const port of serverPorts) {
+            allTests.push(
+                testUdp(localIp, localPort, serverIp, port, timeout),
+                testTcp(localIp, 0, serverIp, port, timeout)
+            );
+        }
         
-        console.log(`[ALG Test] UDP result: ${udpResult.text} (code: ${udpResult.code})`);
-        console.log(`[ALG Test] TCP result: ${tcpResult.text} (code: ${tcpResult.code})`);
+        const results = await Promise.all(allTests);
+        
+        // Organize results by port
+        const portResults = {};
+        for (const result of results) {
+            const port = result.port;
+            const transport = result.transport;
+            
+            if (!portResults[port]) {
+                portResults[port] = { udp: null, tcp: null };
+            }
+            
+            portResults[port][transport] = result;
+        }
+        
+        // Log individual results
+        for (const [port, portResult] of Object.entries(portResults)) {
+            console.log(`[ALG Test] Port ${port} UDP: ${portResult.udp.text} (code: ${portResult.udp.code})`);
+            console.log(`[ALG Test] Port ${port} TCP: ${portResult.tcp.text} (code: ${portResult.tcp.code})`);
+        }
         
         // Determine overall return code
-        // If either test shows ALG (code 2), return 2
-        // If both are FALSE (code 1), return 1
+        // If any test shows ALG (code 2), return 2
+        // If all tests are FALSE (code 1), return 1
         // Otherwise return 4 (failed)
-        let returnCode = RESULT_CODES.FAILED.code;
-        if (udpResult.code === RESULT_CODES.TRUE.code || tcpResult.code === RESULT_CODES.TRUE.code) {
-            returnCode = RESULT_CODES.TRUE.code;
-        } else if (udpResult.code === RESULT_CODES.FALSE.code && tcpResult.code === RESULT_CODES.FALSE.code) {
-            returnCode = RESULT_CODES.FALSE.code;
+        let returnCode = RESULT_CODES.FALSE.code;
+        let hasAnyFailed = false;
+        
+        for (const result of results) {
+            if (result.code === RESULT_CODES.TRUE.code) {
+                returnCode = RESULT_CODES.TRUE.code;
+                break;
+            } else if (result.code === RESULT_CODES.FAILED.code) {
+                hasAnyFailed = true;
+            }
+        }
+        
+        if (returnCode !== RESULT_CODES.TRUE.code && hasAnyFailed) {
+            returnCode = RESULT_CODES.FAILED.code;
         }
         
         return {
-            udp: udpResult,
-            tcp: tcpResult,
+            ports: portResults,
             returnCode
         };
     } catch (error) {

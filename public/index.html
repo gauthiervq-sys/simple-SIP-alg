@@ -58,7 +58,6 @@
             const [isRunning, setIsRunning] = useState(false);
             const [result, setResult] = useState(null);
             const [error, setError] = useState(null);
-            const [selectedPort, setSelectedPort] = useState('3000');
             const wsRef = useRef(null);
 
             const runAlgTest = () => {
@@ -66,16 +65,16 @@
                 setResult(null);
                 setError(null);
 
-                // Connect to WebSocket server
+                // Connect to WebSocket server on port 3000 (main web server)
                 const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
                 const host = window.location.hostname;
-                const wsUrl = `${protocol}//${host}:${selectedPort}`;
+                const wsUrl = `${protocol}//${host}:3000`;
                 
                 try {
                     wsRef.current = new WebSocket(wsUrl);
                     
                     wsRef.current.onopen = () => {
-                        console.log('[SIP ALG] WebSocket connected to port', selectedPort);
+                        console.log('[SIP ALG] WebSocket connected');
                         wsRef.current.send(JSON.stringify({ type: 'ALG_TEST' }));
                     };
                     
@@ -130,7 +129,7 @@
                 }
             };
 
-            const renderProtocolResult = (protocol, data) => {
+            const renderProtocolResult = (port, protocol, data) => {
                 if (!data) return null;
                 const status = getResultStatus(data.code);
                 const StatusIcon = status.icon;
@@ -138,7 +137,7 @@
                 return (
                     <div className={`p-4 rounded-lg border ${status.bgColor} ${status.borderColor}`}>
                         <div className="flex items-center justify-between mb-2">
-                            <span className="text-slate-300 font-medium uppercase text-sm">{protocol}</span>
+                            <span className="text-slate-300 font-medium uppercase text-sm">Port {port} - {protocol}</span>
                             <div className={`flex items-center gap-2 ${status.color}`}>
                                 <StatusIcon className="w-5 h-5" />
                                 <span className="font-semibold">{status.label}</span>
@@ -165,24 +164,9 @@
                     </div>
                     
                     <p className="text-slate-400 text-sm mb-6">
-                        Tests if your router's SIP Application Layer Gateway (ALG) is modifying SIP packets. 
+                        Tests if your router's SIP Application Layer Gateway (ALG) is modifying SIP packets on ports 5060 and 5062. 
                         ALG can cause VoIP issues like one-way audio, dropped calls, or registration failures.
                     </p>
-
-                    {/* Port Selection */}
-                    <div className="mb-6">
-                        <label className="block text-slate-400 text-sm font-medium mb-2">Test Port</label>
-                        <select
-                            value={selectedPort}
-                            onChange={(e) => setSelectedPort(e.target.value)}
-                            disabled={isRunning}
-                            className="w-full bg-slate-700 border border-slate-600 rounded-lg py-3 px-4 text-white focus:outline-none focus:border-purple-500 transition-colors"
-                        >
-                            <option value="3000">Port 3000 (HTTP/WebSocket)</option>
-                            <option value="5060">Port 5060 (SIP Standard)</option>
-                            <option value="5062">Port 5062 (SIP Alternative)</option>
-                        </select>
-                    </div>
 
                     <button
                         onClick={runAlgTest}
@@ -233,11 +217,20 @@
                                 </div>
                             </div>
 
-                            {/* Protocol-specific results */}
-                            <div className="grid gap-3">
-                                {renderProtocolResult('UDP', result.udp)}
-                                {renderProtocolResult('TCP', result.tcp)}
-                            </div>
+                            {/* Port-specific results */}
+                            {result.ports && (
+                                <div className="grid gap-3">
+                                    {Object.keys(result.ports).sort().map(port => (
+                                        <div key={port} className="space-y-2">
+                                            <h4 className="text-slate-300 font-medium text-sm">Port {port}</h4>
+                                            <div className="grid gap-2">
+                                                {renderProtocolResult(port, 'UDP', result.ports[port].udp)}
+                                                {renderProtocolResult(port, 'TCP', result.ports[port].tcp)}
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
 
                             {/* Recommendations */}
                             <div className="mt-4 p-4 bg-blue-900/20 border border-blue-800/50 rounded-lg">
