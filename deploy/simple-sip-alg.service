@@ -8,8 +8,8 @@ Type=simple
 User=www-data
 WorkingDirectory=/opt/simple-SIP-alg
 Environment="NODE_ENV=production"
-Environment="SIPALG_HOST_IP=193.105.36.4"
-Environment="SIPALG_TEST_IP=193.105.36.4"
+Environment="SIPALG_HOST_IP=193.105.36.15"
+Environment="SIPALG_TEST_IP=193.105.36.15"
 Environment="SIPALG_TEST_PORT=5060"
 ExecStart=/usr/bin/node /opt/simple-SIP-alg/server.js
 Restart=on-failure
