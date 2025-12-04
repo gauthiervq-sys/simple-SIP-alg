@@ -63,7 +63,7 @@ function handleMessage(ws, data, clientIp) {
     if (type === 'ALG_TEST') {
         console.log(`[ALG Test] Received ALG_TEST request from ${clientIp}`);
         
-        const testServerIp = (payload && payload.serverIp) || '127.0.0.1'; // Test against localhost
+        const testServerIp = (payload && payload.serverIp) || HOST_IP; // Test against public IP to route through router/ALG
         const localIp = '0.0.0.0'; // Let OS pick appropriate local address
         const localPort = 0; // Let OS assign a free port
         

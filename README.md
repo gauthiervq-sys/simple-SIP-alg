@@ -194,9 +194,12 @@ The tool provides two main tests:
 
 Tests both ports 5060 and 5062 simultaneously:
 - Sends SIP INVITE requests over UDP and TCP to built-in mirror servers
+- Traffic is routed through the server's public IP to ensure it passes through any network routers/firewalls where ALG modifications occur
 - Compares the original request with the mirrored response
 - Detects any modifications made by network routers (ALG)
 - Shows results for all 4 test combinations (2 ports × 2 protocols)
+
+**Important:** The test must route through your router to detect ALG. The server uses its configured public IP (`SIPALG_HOST_IP` environment variable, default: `193.105.36.4`) as the test destination. This ensures SIP packets traverse the network path where ALG modifications occur.
 
 ### VoIP Quality Test (Connection Quality Tab)
 
@@ -236,6 +239,17 @@ sudo ufw status
 ### WebSocket Connection Failed
 
 Check that the server is running and the correct port is selected in the web interface.
+
+### SIP ALG Test Shows "No ALG Detected" When ALG is Known to be Active
+
+If you know your router has SIP ALG enabled but the test shows "No ALG Detected":
+
+1. Verify the server's public IP is correctly configured in the `SIPALG_HOST_IP` environment variable
+2. Ensure your firewall allows SIP traffic on ports 5060 and 5062 (UDP and TCP)
+3. Check that the server is accessible from the public internet on these ports
+4. The test must route through your router - if the server is running on the same machine as the client doing the test, and that machine is behind the router, the traffic should traverse the router's SIP ALG
+
+The key is that SIP packets must pass through the router where ALG modifications occur. Testing against localhost (127.0.0.1) will bypass the router and cannot detect ALG.
 
 ## License
 
