@@ -177,7 +177,8 @@ function testUdp(localIp, localPort, serverIp, serverPort, timeout = 10000) {
                 ...RESULT_CODES.FAILED,
                 error: 'Timeout waiting for server response',
                 diff: '',
-                port: serverPort
+                port: serverPort,
+                transport: 'udp'
             });
         }, timeout);
         
@@ -188,7 +189,8 @@ function testUdp(localIp, localPort, serverIp, serverPort, timeout = 10000) {
                 ...RESULT_CODES.FAILED,
                 error: `Socket error: ${err.message}`,
                 diff: '',
-                port: serverPort
+                port: serverPort,
+                transport: 'udp'
             });
         });
         
@@ -207,7 +209,8 @@ function testUdp(localIp, localPort, serverIp, serverPort, timeout = 10000) {
                         ...RESULT_CODES.FAILED,
                         error: 'Could not extract mirrored request from server response',
                         diff: '',
-                        port: serverPort
+                        port: serverPort,
+                        transport: 'udp'
                     });
                     return;
                 }
@@ -220,7 +223,8 @@ function testUdp(localIp, localPort, serverIp, serverPort, timeout = 10000) {
                         ...RESULT_CODES.FAILED,
                         error: 'Original SIP request data not available for comparison',
                         diff: '',
-                        port: serverPort
+                        port: serverPort,
+                        transport: 'udp'
                     });
                     return;
                 }
@@ -232,13 +236,15 @@ function testUdp(localIp, localPort, serverIp, serverPort, timeout = 10000) {
                     resolve({
                         ...RESULT_CODES.FALSE,
                         diff: '',
-                        port: serverPort
+                        port: serverPort,
+                        transport: 'udp'
                     });
                 } else {
                     resolve({
                         ...RESULT_CODES.TRUE,
                         diff: createDiffSnippet(differences),
-                        port: serverPort
+                        port: serverPort,
+                        transport: 'udp'
                     });
                 }
             } catch (err) {
@@ -247,7 +253,8 @@ function testUdp(localIp, localPort, serverIp, serverPort, timeout = 10000) {
                     ...RESULT_CODES.FAILED,
                     error: `Error processing response: ${err.message}`,
                     diff: '',
-                    port: serverPort
+                    port: serverPort,
+                    transport: 'udp'
                 });
             }
         });
@@ -265,7 +272,8 @@ function testUdp(localIp, localPort, serverIp, serverPort, timeout = 10000) {
                             ...RESULT_CODES.FAILED,
                             error: `Failed to send request: ${err.message}`,
                             diff: '',
-                            port: serverPort
+                            port: serverPort,
+                            transport: 'udp'
                         });
                     }
                 });
@@ -276,7 +284,8 @@ function testUdp(localIp, localPort, serverIp, serverPort, timeout = 10000) {
                 ...RESULT_CODES.FAILED,
                 error: `Failed to bind socket: ${err.message}`,
                 diff: '',
-                port: serverPort
+                port: serverPort,
+                transport: 'udp'
             });
         }
     });
@@ -303,7 +312,8 @@ function testTcp(localIp, localPort, serverIp, serverPort, timeout = 10000) {
                 ...RESULT_CODES.FAILED,
                 error: 'Timeout waiting for server response',
                 diff: '',
-                port: serverPort
+                port: serverPort,
+                transport: 'tcp'
             });
         }, timeout);
         
@@ -314,7 +324,8 @@ function testTcp(localIp, localPort, serverIp, serverPort, timeout = 10000) {
                 ...RESULT_CODES.FAILED,
                 error: `Socket error: ${err.message}`,
                 diff: '',
-                port: serverPort
+                port: serverPort,
+                transport: 'tcp'
             });
         });
         
@@ -336,7 +347,8 @@ function testTcp(localIp, localPort, serverIp, serverPort, timeout = 10000) {
                         ...RESULT_CODES.FAILED,
                         error: 'Could not extract mirrored request from server response',
                         diff: '',
-                        port: serverPort
+                        port: serverPort,
+                        transport: 'tcp'
                     });
                     return;
                 }
@@ -350,13 +362,15 @@ function testTcp(localIp, localPort, serverIp, serverPort, timeout = 10000) {
                     resolve({
                         ...RESULT_CODES.FALSE,
                         diff: '',
-                        port: serverPort
+                        port: serverPort,
+                        transport: 'tcp'
                     });
                 } else {
                     resolve({
                         ...RESULT_CODES.TRUE,
                         diff: createDiffSnippet(differences),
-                        port: serverPort
+                        port: serverPort,
+                        transport: 'tcp'
                     });
                 }
             }
@@ -407,16 +421,13 @@ async function runAlgTest(options) {
         const portResults = {};
         for (const result of results) {
             const port = result.port;
+            const transport = result.transport;
+            
             if (!portResults[port]) {
                 portResults[port] = { udp: null, tcp: null };
             }
             
-            // Determine transport based on test (we alternate UDP, TCP for each port)
-            if (!portResults[port].udp) {
-                portResults[port].udp = result;
-            } else {
-                portResults[port].tcp = result;
-            }
+            portResults[port][transport] = result;
         }
         
         // Log individual results
