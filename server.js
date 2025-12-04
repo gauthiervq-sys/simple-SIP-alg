@@ -1,6 +1,7 @@
 const express = require('express');
 const WebSocket = require('ws');
 const http = require('http');
+const net = require('net');
 const path = require('path');
 const dgram = require('dgram');
 const crypto = require('crypto');
@@ -22,10 +23,6 @@ const OPEN_STATE = 1; // WebSocket.OPEN constant value, used for both WebSocket 
 
 // Serve static frontend files
 app.use(express.static(path.join(__dirname, 'public')));
-
-// Create standalone WebSocket servers for ports 5060 and 5062
-let wss5060 = null;
-let wss5062 = null;
 
 // Helper function to setup WebSocket connection handlers
 function setupWebSocketHandlers(wss, portName) {
@@ -66,14 +63,13 @@ function handleMessage(ws, data, clientIp) {
     if (type === 'ALG_TEST') {
         console.log(`[ALG Test] Received ALG_TEST request from ${clientIp}`);
         
-        const testServerIp = (payload && payload.serverIp) || ALG_TEST_IP;
-        const testServerPort = (payload && payload.serverPort) || ALG_TEST_PORT;
+        const testServerIp = (payload && payload.serverIp) || '127.0.0.1'; // Test against localhost
         const localIp = '0.0.0.0'; // Let OS pick appropriate local address
         const localPort = 0; // Let OS assign a free port
         
         runAlgTest({
             serverIp: testServerIp,
-            serverPort: testServerPort,
+            serverPorts: [5060, 5062], // Test both ports
             localIp: localIp,
             localPort: localPort,
             timeout: 10000
@@ -143,55 +139,6 @@ server.listen(WEB_PORT, '0.0.0.0', () => {
     console.log(`Public access: http://${HOST_IP}:${WEB_PORT}`);
 });
 
-// Try to start WebSocket servers on SIP ports (5060, 5062)
-SIP_PORTS.forEach(port => {
-    const sipHttpServer = http.createServer();
-    const sipWss = new WebSocket.Server({ server: sipHttpServer });
-    
-    setupWebSocketHandlers(sipWss, `SIP port ${port}`);
-    
-    // Store references for graceful shutdown
-    if (port === PORT_5060) {
-        wss5060 = sipWss;
-    } else if (port === PORT_5062) {
-        wss5062 = sipWss;
-    }
-    
-    // Handle errors from the HTTP server
-    sipHttpServer.on('error', (err) => {
-        if (err.code === 'EADDRINUSE') {
-            console.warn(`⚠️  Warning: Port ${port} is already in use`);
-            console.warn(`   This is likely because Asterisk or another service is using this port.`);
-            if (port === PORT_5060) {
-                console.warn(`   Server will continue running on ports ${PORT} and ${PORT_5062}.`);
-                wss5060 = null;
-            } else if (port === PORT_5062) {
-                wss5062 = null;
-            }
-        } else {
-            console.error(`Error on port ${port}:`, err.message);
-        }
-    });
-    
-    // Handle errors from the WebSocket server
-    sipWss.on('error', (err) => {
-        if (err.code === 'EADDRINUSE') {
-            console.warn(`⚠️  Warning: WebSocket port ${port} is already in use. Skipping this port.`);
-        } else {
-            console.error(`WebSocket error on port ${port}:`, err.message);
-        }
-    });
-    
-    try {
-        sipHttpServer.listen(port, '0.0.0.0', () => {
-            console.log(`WebSocket server running on port ${port} for SIP testing`);
-            console.log(`Test connection: ws://${HOST_IP}:${port}`);
-        });
-    } catch (err) {
-        console.warn(`⚠️  Warning: Could not start server on port ${port}: ${err.message}`);
-    }
-});
-
 // Create UDP sockets for ports 5060 and 5062
 let udp5060 = null;
 let udp5062 = null;
@@ -234,8 +181,8 @@ function isRawSipMessage(message) {
     return SIP_METHODS.has(method) || firstLine.startsWith('SIP/2.0');
 }
 
-// Helper function to generate a simple SIP 200 OK response
-function generateSipOkResponse(sipRequest, rinfo) {
+// Helper function to generate a SIP 200 OK response with mirrored request in body
+function generateSipMirrorResponse(sipRequest, rinfo) {
     const lines = sipRequest.split(/\r\n|\n/);
     const requestLine = lines[0] || '';
     
@@ -265,7 +212,11 @@ function generateSipOkResponse(sipRequest, rinfo) {
         }
     }
     
-    // Build response with required headers and proper SIP format (empty line separates headers from body)
+    // The body will contain the original request exactly as received
+    const bodyContent = sipRequest;
+    const contentLength = Buffer.byteLength(bodyContent, 'utf8');
+    
+    // Build response with required headers and the mirrored request as body
     const responseHeaders = [
         'SIP/2.0 200 OK',
         via,
@@ -273,11 +224,11 @@ function generateSipOkResponse(sipRequest, rinfo) {
         to,
         callId,
         cseq,
-        'Content-Length: 0'
+        `Content-Length: ${contentLength}`
     ].filter(line => line !== '');
     
     // SIP requires CRLF line endings and an empty line before the body
-    return responseHeaders.join('\r\n') + '\r\n\r\n';
+    return responseHeaders.join('\r\n') + '\r\n\r\n' + bodyContent;
 }
 
 // Helper function to setup UDP socket
@@ -308,8 +259,8 @@ function setupUdpServer(port, isSecondary = false) {
             const method = firstLine.split(' ')[0] || 'UNKNOWN';
             console.log(`[UDP ${port}] Received raw SIP ${method} message`);
             
-            // Send a simple SIP 200 OK response
-            const response = generateSipOkResponse(messageStr, rinfo);
+            // Send a SIP 200 OK response with the original request mirrored in the body
+            const response = generateSipMirrorResponse(messageStr, rinfo);
             udpSocket.send(response, rinfo.port, rinfo.address, (err) => {
                 if (err) {
                     console.error(`[UDP ${port}] Error sending SIP response:`, err);
@@ -345,13 +296,89 @@ function setupUdpServer(port, isSecondary = false) {
 udp5060 = setupUdpServer(PORT_5060, false);
 udp5062 = setupUdpServer(PORT_5062, true);
 
+// Create TCP servers for SIP ALG testing on ports 5060 and 5062
+let tcp5060 = null;
+let tcp5062 = null;
+
+// Helper function to setup TCP server for SIP mirroring
+function setupTcpServer(port, isSecondary = false) {
+    const tcpServer = net.createServer((socket) => {
+        console.log(`[TCP ${port}] New connection from ${socket.remoteAddress}:${socket.remotePort}`);
+        
+        let receivedData = '';
+        
+        socket.on('data', (data) => {
+            receivedData += data.toString('utf8');
+            
+            // Check if we have a complete SIP message (ends with \r\n\r\n)
+            if (receivedData.includes('\r\n\r\n')) {
+                console.log(`[TCP ${port}] Received complete SIP message`);
+                
+                // Check if this is a raw SIP message
+                if (isRawSipMessage(receivedData)) {
+                    const firstLine = receivedData.split(/\r\n|\n/)[0] || '';
+                    const method = firstLine.split(' ')[0] || 'UNKNOWN';
+                    console.log(`[TCP ${port}] Received raw SIP ${method} message`);
+                    
+                    // Send a SIP 200 OK response with the original request mirrored in the body
+                    const response = generateSipMirrorResponse(receivedData, {
+                        address: socket.remoteAddress,
+                        port: socket.remotePort
+                    });
+                    
+                    socket.write(response, () => {
+                        console.log(`[TCP ${port}] Sent SIP 200 OK mirror response`);
+                        socket.end();
+                    });
+                } else {
+                    console.log(`[TCP ${port}] Not a SIP message, closing connection`);
+                    socket.end();
+                }
+                
+                receivedData = ''; // Reset for next message
+            }
+        });
+        
+        socket.on('error', (err) => {
+            console.error(`[TCP ${port}] Socket error:`, err.message);
+        });
+        
+        socket.on('close', () => {
+            console.log(`[TCP ${port}] Connection closed`);
+        });
+    });
+    
+    tcpServer.on('error', (err) => {
+        if (err.code === 'EADDRINUSE') {
+            if (isSecondary) {
+                console.error(`❌ Error: TCP port ${port} is already in use`);
+            } else {
+                console.warn(`⚠️  Warning: TCP port ${port} is already in use`);
+                console.warn(`   This is likely because Asterisk or another service is using this port.`);
+                console.warn(`   TCP server will continue on port ${PORT_5062} only.`);
+            }
+        } else {
+            console.error(`❌ Error: TCP server error on port ${port}: ${err.message}`);
+        }
+    });
+    
+    tcpServer.listen(port, '0.0.0.0', () => {
+        console.log(`TCP SIP mirror server running on port ${port}`);
+    });
+    
+    return tcpServer;
+}
+
+tcp5060 = setupTcpServer(PORT_5060, false);
+tcp5062 = setupTcpServer(PORT_5062, true);
+
 // Graceful shutdown handler
 process.on('SIGINT', () => {
     console.log('\nShutting down servers...');
     server.close();
-    if (wss5060) wss5060.close();
-    if (wss5062) wss5062.close();
     if (udp5060) udp5060.close();
     if (udp5062) udp5062.close();
+    if (tcp5060) tcp5060.close();
+    if (tcp5062) tcp5062.close();
     process.exit(0);
 });
