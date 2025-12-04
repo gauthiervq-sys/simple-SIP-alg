@@ -4,17 +4,20 @@ A Node.js-based tool for testing SIP (Session Initiation Protocol) connectivity 
 
 ## Features
 
-- **SIP ALG Detection**: Mirror-style test similar to Ruby sip-alg-detector client
-  - Tests both UDP and TCP transports
-  - Compares original vs mirrored SIP INVITE requests
-  - Detects ALG modifications in real-time
+- **SIP ALG Detection**: Self-contained mirror-style test that detects SIP ALG modifications
+  - Tests both UDP and TCP transports on ports 5060 and 5062 simultaneously
+  - Built-in SIP mirror servers that echo back received requests
+  - Compares original vs mirrored SIP INVITE requests to detect modifications
+  - No external test server required
 - **SIP Protocol Testing**: Tests SIP REGISTER, SUBSCRIBE, NOTIFY, and INVITE messages
-- **Multi-Port Support**: WebSocket servers on ports 3000, 5060, and 5062
-- **Quality Metrics**: 30-second connectivity test measuring:
+- **Multi-Port Support**: 
+  - Web interface on port 3000
+  - SIP UDP/TCP mirror servers on ports 5060 and 5062
+- **Quality Metrics**: 2-minute connectivity test measuring:
   - Latency (average round-trip time)
   - Jitter (variance in latency)
   - Packet Loss percentage
-- **Asterisk Compatibility**: Graceful handling if Asterisk is already using port 5060
+- **Asterisk Compatibility**: Graceful handling if Asterisk is already using SIP ports
 - **Automatic Backend**: Runs as a systemd service or with PM2
 
 ## Prerequisites
@@ -154,8 +157,6 @@ pm2 logs simple-sip-alg
 The following environment variables can be used to configure the application:
 
 - `SIPALG_HOST_IP`: Your WAN/public IP address (default: `193.105.36.4`)
-- `SIPALG_TEST_IP`: Target IP for ALG test (default: same as `SIPALG_HOST_IP`)
-- `SIPALG_TEST_PORT`: Target port for ALG test (default: `5060`)
 
 These can be set in:
 - The systemd service file (`/etc/systemd/system/simple-sip-alg.service`)
@@ -169,25 +170,36 @@ Ensure the following ports are open in your firewall:
 ```bash
 sudo ufw allow 3000/tcp
 sudo ufw allow 5060/tcp
+sudo ufw allow 5060/udp
 sudo ufw allow 5062/tcp
+sudo ufw allow 5062/udp
 ```
 
 ## Port Information
 
-- **Port 3000**: HTTP server and WebSocket (always available)
-- **Port 5060**: WebSocket server (standard SIP port, may conflict with Asterisk)
-- **Port 5062**: WebSocket server (alternative SIP port)
+- **Port 3000**: HTTP server and WebSocket for web interface
+- **Port 5060**: UDP and TCP SIP mirror servers (standard SIP port, may conflict with Asterisk)
+- **Port 5062**: UDP and TCP SIP mirror servers (alternative SIP port)
 
 ## Testing Process
 
-The tool performs 6 checks in sequence:
+The tool provides two main tests:
 
-0. **SIP ALG Detection (Mirror Test)**: Sends SIP INVITE to a detector server and compares the mirrored response to detect ALG modifications
+### SIP ALG Detection Test
+
+Tests both ports 5060 and 5062 simultaneously:
+- Sends SIP INVITE requests over UDP and TCP to built-in mirror servers
+- Compares the original request with the mirrored response
+- Detects any modifications made by network routers (ALG)
+- Shows results for all 4 test combinations (2 ports × 2 protocols)
+
+### VoIP Quality Test (Connection Quality Tab)
+
 1. **SIP REGISTER**: Tests client registration with the server
 2. **SIP SUBSCRIBE**: Tests presence subscription
 3. **SIP NOTIFY**: Tests server-initiated notifications
 4. **SIP INVITE**: Tests call invitation flow (100 Trying → 180 Ringing → 200 OK)
-5. **Quality Test**: 30-second connectivity test measuring latency, jitter, and packet loss
+5. **Quality Test**: 2-minute connectivity test measuring latency, jitter, and packet loss
 
 ## Pass Criteria
 
