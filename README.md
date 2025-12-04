@@ -45,6 +45,11 @@ npm install
 
 1. Start the server:
 ```bash
+npm start
+```
+
+Or if you've already run `npm install`:
+```bash
 node server.js
 ```
 
