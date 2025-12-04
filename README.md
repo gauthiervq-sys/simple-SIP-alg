@@ -4,11 +4,12 @@ A Node.js-based tool for testing SIP (Session Initiation Protocol) connectivity 
 
 ## Features
 
-- **SIP ALG Detection**: Self-contained mirror-style test that detects SIP ALG modifications
+- **SIP ALG Detection**: Client-side test that detects SIP ALG modifications from your PC to the backend
+  - **Client-Side Testing**: Download standalone executable to test from your personal computer
   - Tests both UDP and TCP transports on ports 5060 and 5062 simultaneously
   - Built-in SIP mirror servers that echo back received requests
   - Compares original vs mirrored SIP INVITE requests to detect modifications
-  - No external test server required
+  - Cross-platform support: Windows, Linux, macOS
 - **SIP Protocol Testing**: Tests SIP REGISTER, SUBSCRIBE, NOTIFY, and INVITE messages
 - **Multi-Port Support**: 
   - Web interface on port 3000
@@ -28,6 +29,8 @@ A Node.js-based tool for testing SIP (Session Initiation Protocol) connectivity 
 
 ## Installation
 
+### Server Installation
+
 1. Clone the repository:
 ```bash
 git clone <repository-url>
@@ -37,6 +40,13 @@ cd simple-SIP-alg
 2. Install dependencies:
 ```bash
 npm install
+```
+
+3. Build client test tools (optional, for deployment):
+```bash
+./build-client.sh
+# or on Windows: build-client.bat
+# or using npm: npm run build:client
 ```
 
 ## Usage
@@ -55,7 +65,7 @@ node server.js
 
 The server will start:
 - Web server on port 3000
-- WebSocket servers on ports 3000, 5060, and 5062
+- SIP mirror servers on ports 5060 and 5062 (UDP and TCP)
 
 **Note:** If Asterisk is running on port 5060, the server will log a warning but continue running on ports 3000 and 5062.
 
@@ -69,7 +79,46 @@ Or use your server's public IP:
 http://193.105.36.15:3000
 ```
 
-3. Select the port you want to test (3000, 5060, or 5062) and click "Start Check"
+### SIP ALG Testing
+
+#### Important: Client-Side Testing Required
+
+To accurately detect SIP ALG modifications, the test **must be run from your local computer** (not from the server). This ensures that SIP packets pass through your router where ALG modifications occur.
+
+#### Option 1: Using the Web Interface (Recommended)
+
+1. Navigate to the web interface at `http://<server-ip>:3000`
+2. Click on the "SIP ALG Check" tab
+3. Download the appropriate client test tool for your operating system:
+   - Windows: `sip-alg-tester-win.exe`
+   - Linux: `sip-alg-tester-linux`
+   - macOS: `sip-alg-tester-macos`
+4. Run the downloaded tool from your PC:
+
+**Windows:**
+```cmd
+sip-alg-tester-win.exe <server-ip>
+```
+
+**Linux/macOS:**
+```bash
+chmod +x sip-alg-tester-linux  # or sip-alg-tester-macos
+./sip-alg-tester-linux <server-ip>
+```
+
+#### Option 2: Using Node.js Directly
+
+If you have Node.js installed on your client PC:
+
+```bash
+node client-tester.js <server-ip> [ports]
+```
+
+Examples:
+```bash
+node client-tester.js 193.105.36.15
+node client-tester.js 193.105.36.15 5060,5062
+```
 
 ### Automatic Backend Runtime (Production)
 
@@ -83,6 +132,7 @@ sudo mkdir -p /opt/simple-SIP-alg
 sudo cp -r /path/to/simple-SIP-alg/* /opt/simple-SIP-alg/
 cd /opt/simple-SIP-alg
 sudo npm install
+sudo ./build-client.sh  # Build client test tools
 ```
 
 2. Copy the systemd service file:
@@ -192,14 +242,18 @@ The tool provides two main tests:
 
 ### SIP ALG Detection Test
 
-Tests both ports 5060 and 5062 simultaneously:
-- Sends SIP INVITE requests over UDP and TCP to built-in mirror servers
-- Traffic is routed through the server's public IP to ensure it passes through any network routers/firewalls where ALG modifications occur
-- Compares the original request with the mirrored response
-- Detects any modifications made by network routers (ALG)
-- Shows results for all 4 test combinations (2 ports × 2 protocols)
+**Client-Side Testing (Recommended):**
 
-**Important:** The test must route through your router to detect ALG. The server uses its configured public IP (`SIPALG_HOST_IP` environment variable, default: `193.105.36.15`) as the test destination. This ensures SIP packets traverse the network path where ALG modifications occur.
+The SIP ALG test runs from your local computer to the backend server. This is critical because:
+- **Why client-side?** SIP ALG modifications occur at your router. Testing must originate from your PC and pass through your router to detect these modifications.
+- **What it tests:** The tool sends SIP INVITE requests over UDP and TCP from your computer to the server's mirror service on ports 5060 and 5062.
+- **How it works:** The server mirrors back the exact SIP packet it received. By comparing the original sent packet with the mirrored response, the tool can detect any modifications made by your router's SIP ALG.
+- **Results:** Shows results for all 4 test combinations (2 ports × 2 protocols: UDP/TCP on 5060/5062)
+
+**To run the test:**
+1. Download the client test tool from the web interface
+2. Run it from your personal computer: `sip-alg-tester-[platform] <server-ip>`
+3. Review the results to see if your router is modifying SIP packets
 
 ### VoIP Quality Test (Connection Quality Tab)
 
@@ -240,16 +294,47 @@ sudo ufw status
 
 Check that the server is running and the correct port is selected in the web interface.
 
-### SIP ALG Test Shows "No ALG Detected" When ALG is Known to be Active
+### SIP ALG Test Issues
 
-If you know your router has SIP ALG enabled but the test shows "No ALG Detected":
+**"Test Failed" or Connection Timeout:**
 
-1. Verify the server's public IP is correctly configured in the `SIPALG_HOST_IP` environment variable
-2. Ensure your firewall allows SIP traffic on ports 5060 and 5062 (UDP and TCP)
-3. Check that the server is accessible from the public internet on these ports
-4. The test must route through your router - if the server is running on the same machine as the client doing the test, and that machine is behind the router, the traffic should traverse the router's SIP ALG
+1. Ensure the server is running and accessible:
+   ```bash
+   # Check if server is running
+   curl http://<server-ip>:3000
+   
+   # Test if SIP ports are accessible
+   nc -zv <server-ip> 5060
+   nc -zv <server-ip> 5062
+   ```
 
-The key is that SIP packets must pass through the router where ALG modifications occur. Testing against localhost (127.0.0.1) will bypass the router and cannot detect ALG.
+2. Check firewall on both server and client:
+   - **Server:** Ports 5060 and 5062 must be open for UDP and TCP
+   - **Client:** Your local firewall must allow outbound UDP/TCP on ports 5060 and 5062
+
+3. Verify you're running the test from your PC (not from the server itself)
+
+**"No ALG Detected" When You Expect ALG:**
+
+This is actually good news! If the test shows "No ALG Detected", it means:
+- Your router is not modifying SIP packets
+- Your VoIP setup should work without SIP ALG-related issues
+
+**"ALG Detected" - What to Do:**
+
+If the test detects SIP ALG modifications:
+1. Access your router's admin interface
+2. Look for "SIP ALG", "SIP Passthrough", or "SIP Helper" settings
+3. Disable SIP ALG (the exact location varies by router manufacturer)
+4. Reboot your router
+5. Run the test again to verify ALG is disabled
+
+**Cannot Download Client Tools:**
+
+If the download links don't work:
+1. Ensure the server administrator has built the client tools: `./build-client.sh`
+2. Check that the `public/downloads/` directory contains the executables
+3. Alternatively, download `client-tester.js` and run with Node.js: `node client-tester.js <server-ip>`
 
 ## License
 
