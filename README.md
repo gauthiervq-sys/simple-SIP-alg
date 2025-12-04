@@ -66,7 +66,7 @@ http://localhost:3000
 
 Or use your server's public IP:
 ```
-http://193.105.36.4:3000
+http://193.105.36.15:3000
 ```
 
 3. Select the port you want to test (3000, 5060, or 5062) and click "Start Check"
@@ -161,7 +161,7 @@ pm2 logs simple-sip-alg
 
 The following environment variables can be used to configure the application:
 
-- `SIPALG_HOST_IP`: Your WAN/public IP address (default: `193.105.36.4`)
+- `SIPALG_HOST_IP`: Your WAN/public IP address (default: `193.105.36.15`)
 
 These can be set in:
 - The systemd service file (`/etc/systemd/system/simple-sip-alg.service`)
@@ -199,7 +199,7 @@ Tests both ports 5060 and 5062 simultaneously:
 - Detects any modifications made by network routers (ALG)
 - Shows results for all 4 test combinations (2 ports × 2 protocols)
 
-**Important:** The test must route through your router to detect ALG. The server uses its configured public IP (`SIPALG_HOST_IP` environment variable, default: `193.105.36.4`) as the test destination. This ensures SIP packets traverse the network path where ALG modifications occur.
+**Important:** The test must route through your router to detect ALG. The server uses its configured public IP (`SIPALG_HOST_IP` environment variable, default: `193.105.36.15`) as the test destination. This ensures SIP packets traverse the network path where ALG modifications occur.
 
 ### VoIP Quality Test (Connection Quality Tab)
 
