@@ -603,13 +603,21 @@ async function sendResultsToServer(serverIp, sessionId, results) {
 }
 
 /**
+ * Generate random 4-digit session ID
+ */
+function generateSessionId() {
+    return Math.floor(1000 + Math.random() * 9000).toString();
+}
+
+/**
  * Main function
  */
 async function main() {
     const args = process.argv.slice(2);
     
-    // Default server IP
+    // Default server IP and port
     const DEFAULT_SERVER_IP = '193.105.36.15';
+    const DEFAULT_WEB_PORT = '3000';
     
     // Check for --report argument
     let reportSessionId = null;
@@ -623,24 +631,29 @@ async function main() {
         }
     }
     
+    // Auto-generate session ID if not provided
+    if (!reportSessionId) {
+        reportSessionId = generateSessionId();
+    }
+    
     if (filteredArgs[0] === '-h' || filteredArgs[0] === '--help') {
         console.log(`
 ${colors.bright}SIP ALG Client Tester${colors.reset}
 
 ${colors.cyan}Usage:${colors.reset}
-  node client-tester.js [server-ip] [ports] [--report <session-id>]
+  node client-tester.js [server-ip] [ports] [--report <report-id>]
 
 ${colors.cyan}Arguments:${colors.reset}
   server-ip    IP address of the SIP test server (default: ${DEFAULT_SERVER_IP})
   ports        Comma-separated list of ports to test (default: 5060,5062)
-  --report     Session ID to report results back to the web interface
+  --report     Optional: Specify a custom Report ID (auto-generated if not provided)
 
 ${colors.cyan}Examples:${colors.reset}
   node client-tester.js
   node client-tester.js 193.105.36.15
   node client-tester.js 193.105.36.15 5060,5062
   node client-tester.js example.com 5060
-  node client-tester.js --report 8492
+  node client-tester.js --report 1234
   node client-tester.js 193.105.36.15 5060,5062 --report 8492
 
 ${colors.cyan}Description:${colors.reset}
@@ -648,8 +661,12 @@ ${colors.cyan}Description:${colors.reset}
   It sends SIP INVITE requests from your PC to the test server and
   compares the mirrored response to detect any modifications.
   
-  When using --report, the results are sent back to the server and
-  displayed in the web interface associated with the session ID.
+  A Report ID is automatically generated for each test run. Use this
+  Report ID to view the results in the web interface at:
+  http://${DEFAULT_SERVER_IP}:${DEFAULT_WEB_PORT}
+  
+  The results are automatically sent to the server and displayed in
+  the web interface when you enter your Report ID.
 
 ${colors.cyan}Requirements:${colors.reset}
   - Server must be running the SIP mirror service on the specified ports
@@ -669,9 +686,10 @@ ${colors.cyan}Requirements:${colors.reset}
     print(`Local IP:  ${localIp}`, colors.bright);
     print(`Server IP: ${serverIp}`, colors.bright);
     print(`Test Ports: ${ports.join(', ')}`, colors.bright);
-    if (reportSessionId) {
-        print(`Session ID: ${reportSessionId}`, colors.bright + colors.yellow);
-    }
+    console.log('');
+    print(`Report ID: ${reportSessionId}`, colors.bright + colors.yellow);
+    print('Use this Report ID to view results in the web interface:', colors.cyan);
+    print(`  http://${serverIp}:${DEFAULT_WEB_PORT}`, colors.cyan);
     console.log('');
     print('Starting test...', colors.yellow);
     console.log('');
@@ -688,10 +706,8 @@ ${colors.cyan}Requirements:${colors.reset}
         const results = await Promise.all(allTests);
         printResults(results);
         
-        // If --report argument was provided, send results to server
-        if (reportSessionId) {
-            await sendResultsToServer(serverIp, reportSessionId, results);
-        }
+        // Always send results to server with the generated/provided session ID
+        await sendResultsToServer(serverIp, reportSessionId, results);
         
         // Wait for keypress before exiting (especially important for Windows .exe)
         await waitForKeypress();
