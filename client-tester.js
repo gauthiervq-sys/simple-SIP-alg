@@ -615,8 +615,9 @@ function generateSessionId() {
 async function main() {
     const args = process.argv.slice(2);
     
-    // Default server IP
+    // Default server IP and port
     const DEFAULT_SERVER_IP = '193.105.36.15';
+    const DEFAULT_WEB_PORT = '3000';
     
     // Check for --report argument
     let reportSessionId = null;
@@ -662,7 +663,7 @@ ${colors.cyan}Description:${colors.reset}
   
   A Report ID is automatically generated for each test run. Use this
   Report ID to view the results in the web interface at:
-  http://${DEFAULT_SERVER_IP}:3000
+  http://${DEFAULT_SERVER_IP}:${DEFAULT_WEB_PORT}
   
   The results are automatically sent to the server and displayed in
   the web interface when you enter your Report ID.
@@ -688,7 +689,7 @@ ${colors.cyan}Requirements:${colors.reset}
     console.log('');
     print(`Report ID: ${reportSessionId}`, colors.bright + colors.yellow);
     print('Use this Report ID to view results in the web interface:', colors.cyan);
-    print(`  http://${serverIp}:3000`, colors.cyan);
+    print(`  http://${serverIp}:${DEFAULT_WEB_PORT}`, colors.cyan);
     console.log('');
     print('Starting test...', colors.yellow);
     console.log('');
