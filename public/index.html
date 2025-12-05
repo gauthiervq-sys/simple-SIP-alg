@@ -64,6 +64,30 @@
             // Use window location hostname for test target, fallback to configured server
             const TEST_SERVER_IP = window.location.hostname || '193.105.36.15';
             
+            // State for server-side test
+            const [isTestRunning, setIsTestRunning] = useState(false);
+            const [testResult, setTestResult] = useState(null);
+            const [testError, setTestError] = useState(null);
+            
+            // Listen for ALG test results
+            useEffect(() => {
+                const handleAlgResult = (event) => {
+                    const data = event.detail;
+                    setIsTestRunning(false);
+                    
+                    if (data.error) {
+                        setTestError(data.error);
+                        setTestResult(null);
+                    } else if (data.result) {
+                        setTestResult(data.result);
+                        setTestError(null);
+                    }
+                };
+                
+                window.addEventListener('algTestResult', handleAlgResult);
+                return () => window.removeEventListener('algTestResult', handleAlgResult);
+            }, []);
+            
             const getDownloadUrl = (platform) => {
                 const baseUrl = window.location.origin;
                 const extensions = {
@@ -84,6 +108,25 @@
                 if (code === 1) return <CheckCircle className="w-5 h-5" />;
                 if (code === 2) return <AlertTriangle className="w-5 h-5" />;
                 return <XCircle className="w-5 h-5" />;
+            };
+
+            const runServerTest = () => {
+                if (!ws || !wsConnected) {
+                    setTestError('WebSocket not connected. Please refresh the page.');
+                    return;
+                }
+                
+                setIsTestRunning(true);
+                setTestResult(null);
+                setTestError(null);
+                
+                // Send ALG_TEST request to server
+                ws.send(JSON.stringify({
+                    type: 'ALG_TEST',
+                    payload: {
+                        serverIp: TEST_SERVER_IP
+                    }
+                }));
             };
 
             return (
@@ -107,10 +150,137 @@
                                 How to Test
                             </h4>
                             <p className="text-sm text-slate-300 leading-relaxed">
-                                Download the standalone test application for your operating system and run it from your computer 
-                                to test if your router's SIP ALG is modifying SIP packets.
+                                You can test from the server directly using the button below, or download the standalone test 
+                                application to run from your computer for more accurate client-side testing.
                             </p>
                         </div>
+                    </div>
+
+                    {/* Server-Side Test Section */}
+                    <div className="bg-slate-800 rounded-xl border border-slate-700 p-6 shadow-lg">
+                        <div className="flex items-center gap-3 mb-4">
+                            <Server className="w-6 h-6 text-cyan-500" />
+                            <h3 className="text-lg font-bold text-white">Quick Test from Server</h3>
+                        </div>
+                        
+                        <p className="text-slate-400 text-sm mb-4">
+                            Run a quick test directly from the server. Note: This tests the server's connectivity to itself,
+                            not your router's ALG. For accurate client-side testing, use the downloaded application.
+                        </p>
+
+                        <button
+                            onClick={runServerTest}
+                            disabled={!wsConnected || isTestRunning}
+                            className={`px-6 py-3 rounded-lg font-semibold transition-all flex items-center gap-2 ${
+                                !wsConnected || isTestRunning
+                                    ? 'bg-slate-600 text-slate-400 cursor-not-allowed'
+                                    : 'bg-cyan-600 hover:bg-cyan-500 text-white'
+                            }`}
+                        >
+                            {isTestRunning ? (
+                                <>
+                                    <RefreshCw className="w-5 h-5 animate-spin" />
+                                    Running Test...
+                                </>
+                            ) : (
+                                <>
+                                    <Activity className="w-5 h-5" />
+                                    Run Test
+                                </>
+                            )}
+                        </button>
+
+                        {/* Test Results */}
+                        {testError && (
+                            <div className="mt-4 p-4 bg-red-900/20 border border-red-800/50 rounded-lg">
+                                <div className="flex items-center gap-2 text-red-400 font-semibold mb-2">
+                                    <XCircle className="w-5 h-5" />
+                                    Test Error
+                                </div>
+                                <p className="text-sm text-slate-300">{testError}</p>
+                            </div>
+                        )}
+
+                        {testResult && (
+                            <div className="mt-4 space-y-3">
+                                <div className="p-4 bg-slate-900/50 border border-slate-700 rounded-lg">
+                                    <h4 className="text-white font-semibold mb-3">Test Results</h4>
+                                    <div className="space-y-2">
+                                        {Object.entries(testResult.ports || {}).map(([port, portResult]) => (
+                                            <div key={port} className="space-y-1">
+                                                {/* UDP Result */}
+                                                {portResult.udp && (
+                                                    <div className="flex items-center justify-between p-3 bg-slate-800/50 rounded">
+                                                        <span className="text-slate-300 text-sm">
+                                                            Port {port} (UDP)
+                                                        </span>
+                                                        <div className={`flex items-center gap-2 ${getResultColor(portResult.udp.code)}`}>
+                                                            {getResultIcon(portResult.udp.code)}
+                                                            <span className="font-semibold">{portResult.udp.text}</span>
+                                                        </div>
+                                                    </div>
+                                                )}
+                                                {portResult.udp && portResult.udp.error && (
+                                                    <div className="ml-3 text-xs text-yellow-400 bg-yellow-900/20 p-2 rounded">
+                                                        Error: {portResult.udp.error}
+                                                    </div>
+                                                )}
+                                                {portResult.udp && portResult.udp.diff && (
+                                                    <div className="ml-3 text-xs text-slate-400 bg-slate-900/50 p-2 rounded">
+                                                        <pre className="whitespace-pre-wrap">{portResult.udp.diff}</pre>
+                                                    </div>
+                                                )}
+                                                
+                                                {/* TCP Result */}
+                                                {portResult.tcp && (
+                                                    <div className="flex items-center justify-between p-3 bg-slate-800/50 rounded">
+                                                        <span className="text-slate-300 text-sm">
+                                                            Port {port} (TCP)
+                                                        </span>
+                                                        <div className={`flex items-center gap-2 ${getResultColor(portResult.tcp.code)}`}>
+                                                            {getResultIcon(portResult.tcp.code)}
+                                                            <span className="font-semibold">{portResult.tcp.text}</span>
+                                                        </div>
+                                                    </div>
+                                                )}
+                                                {portResult.tcp && portResult.tcp.error && (
+                                                    <div className="ml-3 text-xs text-yellow-400 bg-yellow-900/20 p-2 rounded">
+                                                        Error: {portResult.tcp.error}
+                                                    </div>
+                                                )}
+                                                {portResult.tcp && portResult.tcp.diff && (
+                                                    <div className="ml-3 text-xs text-slate-400 bg-slate-900/50 p-2 rounded">
+                                                        <pre className="whitespace-pre-wrap">{portResult.tcp.diff}</pre>
+                                                    </div>
+                                                )}
+                                            </div>
+                                        ))}
+                                    </div>
+                                    
+                                    {/* Overall Result */}
+                                    <div className="mt-4 pt-4 border-t border-slate-700">
+                                        {testResult.returnCode === 1 && (
+                                            <div className="flex items-center gap-2 text-green-400">
+                                                <CheckCircle className="w-5 h-5" />
+                                                <span className="font-semibold">No ALG Detected</span>
+                                            </div>
+                                        )}
+                                        {testResult.returnCode === 2 && (
+                                            <div className="flex items-center gap-2 text-red-400">
+                                                <AlertTriangle className="w-5 h-5" />
+                                                <span className="font-semibold">ALG Detected</span>
+                                            </div>
+                                        )}
+                                        {testResult.returnCode === 4 && (
+                                            <div className="flex items-center gap-2 text-yellow-400">
+                                                <XCircle className="w-5 h-5" />
+                                                <span className="font-semibold">Test Failed</span>
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
+                            </div>
+                        )}
                     </div>
 
                     {/* Download Options */}
@@ -325,6 +495,20 @@
                 websocket.onerror = (error) => {
                     console.error('WebSocket error:', error);
                     setWsError('WebSocket connection error. Some features may be unavailable.');
+                };
+                
+                websocket.onmessage = (event) => {
+                    try {
+                        const data = JSON.parse(event.data);
+                        console.log('WebSocket message received:', data);
+                        
+                        // Dispatch custom event for ALG test results
+                        if (data.type === 'ALG_RESULT') {
+                            window.dispatchEvent(new CustomEvent('algTestResult', { detail: data }));
+                        }
+                    } catch (error) {
+                        console.error('Error parsing WebSocket message:', error);
+                    }
                 };
                 
                 websocket.onclose = (event) => {
