@@ -711,14 +711,17 @@ ${colors.cyan}Requirements:${colors.reset}
         // Prompt user for Report ID
         reportSessionId = await promptUser(colors.bright + colors.yellow + 'Enter your Report ID: ' + colors.reset);
         
-        // Validate Report ID
-        if (!reportSessionId || reportSessionId.length === 0) {
+        // Validate Report ID - ensure it's not empty after trimming
+        if (!reportSessionId || !reportSessionId.trim()) {
             print('', colors.reset);
             print('ERROR: Report ID is required to run the test.', colors.red);
             print('', colors.reset);
             await waitForKeypress();
             process.exit(1);
         }
+        
+        // Update with trimmed value
+        reportSessionId = reportSessionId.trim();
         
         print('', colors.reset);
         print(`Report ID "${reportSessionId}" received. Starting test...`, colors.green);
