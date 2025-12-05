@@ -55,6 +55,16 @@ npm install
 
 ### Quick Start (Manual)
 
+**IMPORTANT:** Before starting the server for the first time, you must build the client executables. Without this step, users will get "File Not Available" errors when trying to download test tools.
+
+```bash
+# Build client executables (REQUIRED - do this first!)
+./build-client.sh  # or build-client.bat on Windows
+
+# Validate that executables were built successfully
+npm run validate
+```
+
 1. Start the server:
 ```bash
 npm start
