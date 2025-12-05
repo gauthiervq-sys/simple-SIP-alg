@@ -184,15 +184,27 @@ function testUdp(localIp, serverIp, serverPort, timeout = 10000) {
         const socket = dgram.createSocket('udp4');
         let timeoutHandle;
         let sipData = null;
+        let isResolved = false;
         
         const cleanup = () => {
             clearTimeout(timeoutHandle);
-            socket.close();
+            try {
+                socket.close();
+            } catch (e) {
+                // Socket might already be closed
+            }
+        };
+        
+        const resolveOnce = (result) => {
+            if (!isResolved) {
+                isResolved = true;
+                cleanup();
+                resolve(result);
+            }
         };
         
         timeoutHandle = setTimeout(() => {
-            cleanup();
-            resolve({
+            resolveOnce({
                 ...RESULT_CODES.FAILED,
                 error: 'Timeout waiting for server response',
                 port: serverPort,
@@ -201,8 +213,7 @@ function testUdp(localIp, serverIp, serverPort, timeout = 10000) {
         }, timeout);
         
         socket.on('error', (err) => {
-            cleanup();
-            resolve({
+            resolveOnce({
                 ...RESULT_CODES.FAILED,
                 error: `Socket error: ${err.message}`,
                 port: serverPort,
@@ -213,11 +224,10 @@ function testUdp(localIp, serverIp, serverPort, timeout = 10000) {
         socket.on('message', (msg, rinfo) => {
             try {
                 const response = msg.toString('utf8');
-                cleanup();
                 
                 const bodyMatch = response.match(/\r\n\r\n(.+)$/s);
                 if (!bodyMatch || !bodyMatch[1]) {
-                    resolve({
+                    resolveOnce({
                         ...RESULT_CODES.FAILED,
                         error: 'Could not extract mirrored request from server response',
                         port: serverPort,
@@ -229,7 +239,7 @@ function testUdp(localIp, serverIp, serverPort, timeout = 10000) {
                 const mirroredRequest = bodyMatch[1].trim();
                 
                 if (!sipData) {
-                    resolve({
+                    resolveOnce({
                         ...RESULT_CODES.FAILED,
                         error: 'Original SIP request data not available',
                         port: serverPort,
@@ -241,13 +251,13 @@ function testUdp(localIp, serverIp, serverPort, timeout = 10000) {
                 const differences = compareSipMessages(sipData.request, mirroredRequest);
                 
                 if (differences.length === 0) {
-                    resolve({
+                    resolveOnce({
                         ...RESULT_CODES.FALSE,
                         port: serverPort,
                         transport: 'udp'
                     });
                 } else {
-                    resolve({
+                    resolveOnce({
                         ...RESULT_CODES.TRUE,
                         differences: differences.slice(0, 5),
                         port: serverPort,
@@ -255,8 +265,7 @@ function testUdp(localIp, serverIp, serverPort, timeout = 10000) {
                     });
                 }
             } catch (err) {
-                cleanup();
-                resolve({
+                resolveOnce({
                     ...RESULT_CODES.FAILED,
                     error: `Error processing response: ${err.message}`,
                     port: serverPort,
@@ -267,25 +276,32 @@ function testUdp(localIp, serverIp, serverPort, timeout = 10000) {
         
         try {
             socket.bind(0, localIp, () => {
-                const localPort = socket.address().port;
-                sipData = buildSipInvite(localIp, localPort, serverIp, serverPort, 'UDP');
-                const buffer = Buffer.from(sipData.request, 'utf8');
-                
-                socket.send(buffer, 0, buffer.length, serverPort, serverIp, (err) => {
-                    if (err) {
-                        cleanup();
-                        resolve({
-                            ...RESULT_CODES.FAILED,
-                            error: `Failed to send request: ${err.message}`,
-                            port: serverPort,
-                            transport: 'udp'
-                        });
-                    }
-                });
+                try {
+                    const localPort = socket.address().port;
+                    sipData = buildSipInvite(localIp, localPort, serverIp, serverPort, 'UDP');
+                    const buffer = Buffer.from(sipData.request, 'utf8');
+                    
+                    socket.send(buffer, 0, buffer.length, serverPort, serverIp, (err) => {
+                        if (err) {
+                            resolveOnce({
+                                ...RESULT_CODES.FAILED,
+                                error: `Failed to send request: ${err.message}`,
+                                port: serverPort,
+                                transport: 'udp'
+                            });
+                        }
+                    });
+                } catch (err) {
+                    resolveOnce({
+                        ...RESULT_CODES.FAILED,
+                        error: `Error preparing request: ${err.message}`,
+                        port: serverPort,
+                        transport: 'udp'
+                    });
+                }
             });
         } catch (err) {
-            cleanup();
-            resolve({
+            resolveOnce({
                 ...RESULT_CODES.FAILED,
                 error: `Failed to bind socket: ${err.message}`,
                 port: serverPort,
