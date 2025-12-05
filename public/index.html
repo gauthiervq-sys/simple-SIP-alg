@@ -61,8 +61,7 @@
 
         // --- SIP ALG TEST COMPONENT ---
         const SipAlgTest = ({ ws, wsConnected }) => {
-            const serverIp = window.location.hostname || '193.105.36.15';
-            // Use env variable or window location for test target
+            // Use window location hostname for test target, fallback to configured server
             const TEST_SERVER_IP = window.location.hostname || '193.105.36.15';
             
             const [isRunning, setIsRunning] = useState(false);
@@ -456,7 +455,7 @@
                             </summary>
                             <div className="mt-4 space-y-3 text-sm text-slate-400">
                                 <p>
-                                    <strong className="text-slate-300">Server IP:</strong> {serverIp}
+                                    <strong className="text-slate-300">Server IP:</strong> {TEST_SERVER_IP}
                                 </p>
                                 <p>
                                     <strong className="text-slate-300">Test Ports:</strong> 5060, 5062 (UDP and TCP)

@@ -17,6 +17,7 @@
 const dgram = require('dgram');
 const net = require('net');
 const crypto = require('crypto');
+const readline = require('readline');
 
 // ANSI color codes for terminal output
 const colors = {
@@ -408,7 +409,6 @@ function waitForKeypress() {
         } catch (err) {
             // If setRawMode fails (e.g., on some platforms), fall back to readline
             console.log('(Press Enter to continue)');
-            const readline = require('readline');
             const rl = readline.createInterface({
                 input: process.stdin,
                 output: process.stdout
