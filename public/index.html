@@ -52,204 +52,219 @@
         const Server = ({ className }) => (
             <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><rect x="2" y="2" width="20" height="8" rx="2" ry="2"></rect><rect x="2" y="14" width="20" height="8" rx="2" ry="2"></rect><line x1="6" y1="6" x2="6.01" y2="6"></line><line x1="6" y1="18" x2="6.01" y2="18"></line></svg>
         );
+        const Download = ({ className }) => (
+            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+        );
+        const Monitor = ({ className }) => (
+            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect><line x1="8" y1="21" x2="16" y2="21"></line><line x1="12" y1="17" x2="12" y2="21"></line></svg>
+        );
 
         // --- SIP ALG TEST COMPONENT ---
         const SipAlgTest = () => {
-            const [isRunning, setIsRunning] = useState(false);
-            const [result, setResult] = useState(null);
-            const [error, setError] = useState(null);
-            const wsRef = useRef(null);
-
-            const runAlgTest = () => {
-                setIsRunning(true);
-                setResult(null);
-                setError(null);
-
-                // Connect to WebSocket server on port 3000 (main web server)
-                const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-                const host = window.location.hostname;
-                const wsUrl = `${protocol}//${host}:3000`;
-                
-                try {
-                    wsRef.current = new WebSocket(wsUrl);
-                    
-                    wsRef.current.onopen = () => {
-                        console.log('[SIP ALG] WebSocket connected');
-                        wsRef.current.send(JSON.stringify({ type: 'ALG_TEST' }));
-                    };
-                    
-                    wsRef.current.onmessage = (event) => {
-                        try {
-                            const data = JSON.parse(event.data);
-                            if (data.type === 'ALG_RESULT') {
-                                setIsRunning(false);
-                                if (data.error) {
-                                    setError(data.error);
-                                } else {
-                                    setResult(data.result);
-                                }
-                                wsRef.current.close();
-                            }
-                        } catch (e) {
-                            console.error('[SIP ALG] Error parsing response:', e);
-                        }
-                    };
-                    
-                    wsRef.current.onerror = (err) => {
-                        console.error('[SIP ALG] WebSocket error:', err);
-                        setError('Connection error. Make sure the server is running.');
-                        setIsRunning(false);
-                    };
-                    
-                    wsRef.current.onclose = () => {
-                        console.log('[SIP ALG] WebSocket closed');
-                    };
-                    
-                    // Timeout after 15 seconds
-                    setTimeout(() => {
-                        if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
-                            setError('Test timed out. Server may be unreachable.');
-                            setIsRunning(false);
-                            wsRef.current.close();
-                        }
-                    }, 15000);
-                    
-                } catch (e) {
-                    setError(`Failed to connect: ${e.message}`);
-                    setIsRunning(false);
-                }
-            };
-
-            const getResultStatus = (code) => {
-                switch (code) {
-                    case 1: return { label: 'No ALG Detected', color: 'text-green-500', icon: CheckCircle, bgColor: 'bg-green-900/20', borderColor: 'border-green-800/50' };
-                    case 2: return { label: 'ALG Detected', color: 'text-red-500', icon: AlertTriangle, bgColor: 'bg-red-900/20', borderColor: 'border-red-800/50' };
-                    case 4: return { label: 'Test Failed', color: 'text-yellow-500', icon: Info, bgColor: 'bg-yellow-900/20', borderColor: 'border-yellow-800/50' };
-                    default: return { label: 'Unknown', color: 'text-slate-500', icon: Info, bgColor: 'bg-slate-900/20', borderColor: 'border-slate-800/50' };
-                }
-            };
-
-            const renderProtocolResult = (port, protocol, data) => {
-                if (!data) return null;
-                const status = getResultStatus(data.code);
-                const StatusIcon = status.icon;
-                
-                return (
-                    <div className={`p-4 rounded-lg border ${status.bgColor} ${status.borderColor}`}>
-                        <div className="flex items-center justify-between mb-2">
-                            <span className="text-slate-300 font-medium uppercase text-sm">Port {port} - {protocol}</span>
-                            <div className={`flex items-center gap-2 ${status.color}`}>
-                                <StatusIcon className="w-5 h-5" />
-                                <span className="font-semibold">{status.label}</span>
-                            </div>
-                        </div>
-                        {data.error && (
-                            <p className="text-xs text-slate-400 mt-2">{data.error}</p>
-                        )}
-                        {data.diff && (
-                            <div className="mt-3">
-                                <p className="text-xs text-slate-500 mb-1">Differences detected:</p>
-                                <pre className="text-xs bg-slate-900/50 p-2 rounded overflow-x-auto text-slate-300">{data.diff}</pre>
-                            </div>
-                        )}
-                    </div>
-                );
+            const serverIp = window.location.hostname;
+            
+            const getDownloadUrl = (platform) => {
+                const baseUrl = window.location.origin;
+                const extensions = {
+                    'windows': '-win.exe',
+                    'linux': '-linux',
+                    'macos': '-macos'
+                };
+                return `${baseUrl}/downloads/sip-alg-tester${extensions[platform]}`;
             };
 
             return (
-                <div className="bg-slate-800 rounded-xl border border-slate-700 p-6 shadow-lg">
-                    <div className="flex items-center gap-3 mb-4">
-                        <Shield className="w-6 h-6 text-purple-500" />
-                        <h2 className="text-xl font-bold text-white">SIP ALG Detection</h2>
-                    </div>
-                    
-                    <p className="text-slate-400 text-sm mb-6">
-                        Tests if your router's SIP Application Layer Gateway (ALG) is modifying SIP packets on ports 5060 and 5062. 
-                        ALG can cause VoIP issues like one-way audio, dropped calls, or registration failures.
-                    </p>
-
-                    <button
-                        onClick={runAlgTest}
-                        disabled={isRunning}
-                        className={`w-full py-3 px-6 rounded-lg font-semibold transition-all flex items-center justify-center gap-2 ${
-                            isRunning 
-                                ? 'bg-slate-700 text-slate-400 cursor-not-allowed' 
-                                : 'bg-purple-600 hover:bg-purple-500 text-white shadow-lg shadow-purple-900/20'
-                        }`}
-                    >
-                        {isRunning ? (
-                            <>
-                                <RefreshCw className="w-5 h-5 animate-spin" />
-                                Running SIP ALG Test...
-                            </>
-                        ) : (
-                            <>
-                                <Server className="w-5 h-5" />
-                                Run SIP ALG Test
-                            </>
-                        )}
-                    </button>
-
-                    {error && (
-                        <div className="mt-4 p-4 bg-red-900/20 border border-red-800/50 rounded-lg">
-                            <div className="flex items-center gap-2 text-red-400">
-                                <XCircle className="w-5 h-5" />
-                                <span className="font-medium">Error</span>
-                            </div>
-                            <p className="text-sm text-slate-300 mt-2">{error}</p>
+                <div className="space-y-6">
+                    {/* Main Info Card */}
+                    <div className="bg-slate-800 rounded-xl border border-slate-700 p-6 shadow-lg">
+                        <div className="flex items-center gap-3 mb-4">
+                            <Shield className="w-6 h-6 text-purple-500" />
+                            <h2 className="text-xl font-bold text-white">SIP ALG Detection</h2>
                         </div>
-                    )}
+                        
+                        <p className="text-slate-400 text-sm mb-4">
+                            Tests if your router's SIP Application Layer Gateway (ALG) is modifying SIP packets on ports 5060 and 5062. 
+                            ALG can cause VoIP issues like one-way audio, dropped calls, or registration failures.
+                        </p>
 
-                    {result && (
-                        <div className="mt-6 space-y-4">
-                            <h3 className="text-white font-semibold">Test Results</h3>
-                            
-                            {/* Overall Status */}
-                            <div className={`p-4 rounded-lg border ${getResultStatus(result.returnCode).bgColor} ${getResultStatus(result.returnCode).borderColor}`}>
-                                <div className="flex items-center gap-3">
-                                    {React.createElement(getResultStatus(result.returnCode).icon, { className: `w-8 h-8 ${getResultStatus(result.returnCode).color}` })}
-                                    <div>
-                                        <div className={`text-2xl font-bold ${getResultStatus(result.returnCode).color}`}>
-                                            {getResultStatus(result.returnCode).label}
-                                        </div>
-                                        <div className="text-sm text-slate-400">Overall Result</div>
-                                    </div>
+                        {/* Important Notice */}
+                        <div className="mt-4 p-4 bg-blue-900/20 border border-blue-800/50 rounded-lg">
+                            <h4 className="text-blue-400 font-semibold mb-2 flex items-center gap-2">
+                                <Info className="w-4 h-4" />
+                                Important: Client-Side Testing Required
+                            </h4>
+                            <p className="text-sm text-slate-300 leading-relaxed mb-3">
+                                To accurately detect SIP ALG modifications, the test must run from <strong>your local computer</strong> to this server.
+                                This ensures the SIP packets pass through your router where ALG modifications occur.
+                            </p>
+                            <p className="text-sm text-slate-300 leading-relaxed">
+                                Download and run the test tool on your PC to check your network's SIP ALG status.
+                            </p>
+                        </div>
+                    </div>
+
+                    {/* Download Options */}
+                    <div className="bg-slate-800 rounded-xl border border-slate-700 p-6 shadow-lg">
+                        <div className="flex items-center gap-3 mb-4">
+                            <Download className="w-6 h-6 text-emerald-500" />
+                            <h3 className="text-lg font-bold text-white">Download Client Test Tool</h3>
+                        </div>
+                        
+                        <p className="text-slate-400 text-sm mb-6">
+                            Select your operating system to download the standalone test application:
+                        </p>
+
+                        <div className="grid md:grid-cols-3 gap-4">
+                            {/* Windows */}
+                            <a 
+                                href={getDownloadUrl('windows')}
+                                download
+                                className="flex flex-col items-center gap-3 p-6 bg-slate-700/50 hover:bg-slate-700 rounded-lg border border-slate-600 hover:border-blue-500 transition-all group"
+                            >
+                                <Monitor className="w-12 h-12 text-blue-400 group-hover:text-blue-300" />
+                                <div className="text-center">
+                                    <div className="text-white font-semibold mb-1">Windows</div>
+                                    <div className="text-xs text-slate-400">sip-alg-tester-win.exe</div>
                                 </div>
+                                <div className="flex items-center gap-2 text-sm text-blue-400 group-hover:text-blue-300">
+                                    <Download className="w-4 h-4" />
+                                    Download
+                                </div>
+                            </a>
+
+                            {/* Linux */}
+                            <a 
+                                href={getDownloadUrl('linux')}
+                                download
+                                className="flex flex-col items-center gap-3 p-6 bg-slate-700/50 hover:bg-slate-700 rounded-lg border border-slate-600 hover:border-emerald-500 transition-all group"
+                            >
+                                <Server className="w-12 h-12 text-emerald-400 group-hover:text-emerald-300" />
+                                <div className="text-center">
+                                    <div className="text-white font-semibold mb-1">Linux</div>
+                                    <div className="text-xs text-slate-400">sip-alg-tester-linux</div>
+                                </div>
+                                <div className="flex items-center gap-2 text-sm text-emerald-400 group-hover:text-emerald-300">
+                                    <Download className="w-4 h-4" />
+                                    Download
+                                </div>
+                            </a>
+
+                            {/* macOS */}
+                            <a 
+                                href={getDownloadUrl('macos')}
+                                download
+                                className="flex flex-col items-center gap-3 p-6 bg-slate-700/50 hover:bg-slate-700 rounded-lg border border-slate-600 hover:border-purple-500 transition-all group"
+                            >
+                                <Monitor className="w-12 h-12 text-purple-400 group-hover:text-purple-300" />
+                                <div className="text-center">
+                                    <div className="text-white font-semibold mb-1">macOS</div>
+                                    <div className="text-xs text-slate-400">sip-alg-tester-macos</div>
+                                </div>
+                                <div className="flex items-center gap-2 text-sm text-purple-400 group-hover:text-purple-300">
+                                    <Download className="w-4 h-4" />
+                                    Download
+                                </div>
+                            </a>
+                        </div>
+                    </div>
+
+                    {/* Instructions */}
+                    <div className="bg-slate-800 rounded-xl border border-slate-700 p-6 shadow-lg">
+                        <div className="flex items-center gap-3 mb-4">
+                            <Info className="w-6 h-6 text-cyan-500" />
+                            <h3 className="text-lg font-bold text-white">How to Use</h3>
+                        </div>
+
+                        <div className="space-y-4 text-sm">
+                            {/* Windows Instructions */}
+                            <div>
+                                <h4 className="text-blue-400 font-semibold mb-2 flex items-center gap-2">
+                                    <Monitor className="w-4 h-4" />
+                                    Windows
+                                </h4>
+                                <ol className="list-decimal list-inside space-y-1 text-slate-300 pl-2">
+                                    <li>Download <code className="bg-slate-900/50 px-1 rounded text-xs">sip-alg-tester-win.exe</code></li>
+                                    <li>Open Command Prompt or PowerShell</li>
+                                    <li>Navigate to the download folder</li>
+                                    <li>Run: <code className="bg-slate-900/50 px-2 py-1 rounded text-xs">sip-alg-tester-win.exe {serverIp}</code></li>
+                                </ol>
                             </div>
 
-                            {/* Port-specific results */}
-                            {result.ports && (
-                                <div className="grid gap-3">
-                                    {Object.keys(result.ports).sort().map(port => (
-                                        <div key={port} className="space-y-2">
-                                            <h4 className="text-slate-300 font-medium text-sm">Port {port}</h4>
-                                            <div className="grid gap-2">
-                                                {renderProtocolResult(port, 'UDP', result.ports[port].udp)}
-                                                {renderProtocolResult(port, 'TCP', result.ports[port].tcp)}
-                                            </div>
-                                        </div>
-                                    ))}
-                                </div>
-                            )}
-
-                            {/* Recommendations */}
-                            <div className="mt-4 p-4 bg-blue-900/20 border border-blue-800/50 rounded-lg">
-                                <h4 className="text-blue-400 font-semibold mb-2 flex items-center gap-2">
-                                    <Info className="w-4 h-4" />
-                                    What does this mean?
+                            {/* Linux Instructions */}
+                            <div>
+                                <h4 className="text-emerald-400 font-semibold mb-2 flex items-center gap-2">
+                                    <Server className="w-4 h-4" />
+                                    Linux
                                 </h4>
-                                <p className="text-sm text-slate-300 leading-relaxed">
-                                    {result.returnCode === 1 ? (
-                                        "Your router is not modifying SIP packets. This is ideal for VoIP communications."
-                                    ) : result.returnCode === 2 ? (
-                                        "Your router's SIP ALG is actively modifying SIP packets. This can cause VoIP issues. Consider disabling SIP ALG in your router settings."
-                                    ) : (
-                                        "The test could not complete successfully. This may be due to firewall restrictions or network configuration."
-                                    )}
+                                <ol className="list-decimal list-inside space-y-1 text-slate-300 pl-2">
+                                    <li>Download <code className="bg-slate-900/50 px-1 rounded text-xs">sip-alg-tester-linux</code></li>
+                                    <li>Open Terminal</li>
+                                    <li>Make executable: <code className="bg-slate-900/50 px-2 py-1 rounded text-xs">chmod +x sip-alg-tester-linux</code></li>
+                                    <li>Run: <code className="bg-slate-900/50 px-2 py-1 rounded text-xs">./sip-alg-tester-linux {serverIp}</code></li>
+                                </ol>
+                            </div>
+
+                            {/* macOS Instructions */}
+                            <div>
+                                <h4 className="text-purple-400 font-semibold mb-2 flex items-center gap-2">
+                                    <Monitor className="w-4 h-4" />
+                                    macOS
+                                </h4>
+                                <ol className="list-decimal list-inside space-y-1 text-slate-300 pl-2">
+                                    <li>Download <code className="bg-slate-900/50 px-1 rounded text-xs">sip-alg-tester-macos</code></li>
+                                    <li>Open Terminal</li>
+                                    <li>Make executable: <code className="bg-slate-900/50 px-2 py-1 rounded text-xs">chmod +x sip-alg-tester-macos</code></li>
+                                    <li>Run: <code className="bg-slate-900/50 px-2 py-1 rounded text-xs">./sip-alg-tester-macos {serverIp}</code></li>
+                                </ol>
+                            </div>
+                        </div>
+
+                        {/* Additional Info */}
+                        <div className="mt-6 p-4 bg-slate-900/50 rounded-lg border border-slate-700">
+                            <h4 className="text-slate-300 font-semibold mb-2">Understanding the Results</h4>
+                            <ul className="space-y-2 text-xs text-slate-400">
+                                <li className="flex items-start gap-2">
+                                    <CheckCircle className="w-4 h-4 text-green-500 flex-shrink-0 mt-0.5" />
+                                    <span><strong className="text-green-400">No ALG Detected:</strong> Your router is not modifying SIP packets. Ideal for VoIP.</span>
+                                </li>
+                                <li className="flex items-start gap-2">
+                                    <AlertTriangle className="w-4 h-4 text-red-500 flex-shrink-0 mt-0.5" />
+                                    <span><strong className="text-red-400">ALG Detected:</strong> Your router is modifying SIP packets. This can cause VoIP issues. Consider disabling SIP ALG in your router settings.</span>
+                                </li>
+                                <li className="flex items-start gap-2">
+                                    <Info className="w-4 h-4 text-yellow-500 flex-shrink-0 mt-0.5" />
+                                    <span><strong className="text-yellow-400">Test Failed:</strong> Unable to complete the test. Check firewall settings and ensure ports 5060 and 5062 are accessible.</span>
+                                </li>
+                            </ul>
+                        </div>
+                    </div>
+
+                    {/* Technical Details */}
+                    <div className="bg-slate-800/50 rounded-xl border border-slate-700 p-6">
+                        <details className="cursor-pointer">
+                            <summary className="text-white font-semibold flex items-center gap-2 hover:text-slate-300 transition-colors">
+                                <Info className="w-4 h-4" />
+                                Technical Details
+                            </summary>
+                            <div className="mt-4 space-y-3 text-sm text-slate-400">
+                                <p>
+                                    <strong className="text-slate-300">Server IP:</strong> {serverIp}
+                                </p>
+                                <p>
+                                    <strong className="text-slate-300">Test Ports:</strong> 5060, 5062 (UDP and TCP)
+                                </p>
+                                <p>
+                                    <strong className="text-slate-300">How it works:</strong> The tool sends SIP INVITE packets from your computer to this server. 
+                                    The server mirrors the packet back exactly as received. By comparing the original and mirrored packets, 
+                                    the tool can detect if your router's SIP ALG modified the packet during transit.
+                                </p>
+                                <p>
+                                    <strong className="text-slate-300">Why client-side?</strong> Testing must originate from your PC to pass through your router 
+                                    where ALG modifications occur. Server-side testing would only check the server's router, not yours.
                                 </p>
                             </div>
-                        </div>
-                    )}
+                        </details>
+                    </div>
                 </div>
             );
         };

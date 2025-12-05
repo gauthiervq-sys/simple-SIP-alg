@@ -1,0 +1,2 @@
+# Build executables to populate this directory
+# Run: ./build-client.sh or npm run build:client

@@ -7,7 +7,9 @@
     "prestart": "node check-deps.js",
     "start": "node server.js",
     "start:pm2": "pm2 start server.js --name simple-sip-alg",
-    "test": "echo \"No tests specified\" && exit 0"
+    "test": "echo \"No tests specified\" && exit 0",
+    "build:client": "pkg client-tester.js --targets node18-linux-x64,node18-win-x64,node18-macos-x64 --output dist/sip-alg-tester",
+    "build:client-all": "pkg client-tester.js --targets node18-linux-x64,node18-win-x64,node18-macos-x64,node18-linux-arm64 --output dist/sip-alg-tester"
   },
   "keywords": [
     "sip",
@@ -20,5 +22,20 @@
   "dependencies": {
     "express": "^4.18.2",
     "ws": "^8.17.1"
+  },
+  "devDependencies": {
+    "pkg": "^5.8.1"
+  },
+  "bin": {
+    "sip-alg-tester": "./client-tester.js"
+  },
+  "pkg": {
+    "assets": [],
+    "targets": [
+      "node18-linux-x64",
+      "node18-win-x64",
+      "node18-macos-x64"
+    ],
+    "outputPath": "dist"
   }
 }
