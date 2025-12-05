@@ -60,7 +60,7 @@
         );
 
         // --- SIP ALG TEST COMPONENT ---
-        const SipAlgTest = ({ ws, wsConnected }) => {
+        const SipAlgTest = ({ ws, wsConnected, sessionId }) => {
             // Use window location hostname for test target, fallback to configured server
             const TEST_SERVER_IP = window.location.hostname || '193.105.36.15';
             
@@ -68,6 +68,10 @@
             const [isTestRunning, setIsTestRunning] = useState(false);
             const [testResult, setTestResult] = useState(null);
             const [testError, setTestError] = useState(null);
+            
+            // State for client test results
+            const [clientTestResult, setClientTestResult] = useState(null);
+            const [clientTestReceived, setClientTestReceived] = useState(false);
             
             // Listen for ALG test results
             useEffect(() => {
@@ -91,6 +95,21 @@
                 window.addEventListener('algTestResult', handleAlgResult);
                 return () => window.removeEventListener('algTestResult', handleAlgResult);
             }, []); // Empty dependency array ensures this runs only on mount/unmount
+            
+            // Listen for client test results
+            useEffect(() => {
+                const handleClientTestResult = (event) => {
+                    const data = event.detail;
+                    console.log('Received client test result:', data);
+                    if (data && data.result) {
+                        setClientTestResult(data.result);
+                        setClientTestReceived(true);
+                    }
+                };
+                
+                window.addEventListener('clientTestResult', handleClientTestResult);
+                return () => window.removeEventListener('clientTestResult', handleClientTestResult);
+            }, []);
             
             const getDownloadUrl = (platform) => {
                 const baseUrl = window.location.origin;
@@ -159,6 +178,113 @@
                             </p>
                         </div>
                     </div>
+
+                    {/* Client Test Instructions with Session ID */}
+                    {sessionId && (
+                        <div className="bg-gradient-to-r from-emerald-900/30 to-cyan-900/30 rounded-xl border border-emerald-700/50 p-6 shadow-lg">
+                            <div className="flex items-center gap-3 mb-4">
+                                <Monitor className="w-6 h-6 text-emerald-400" />
+                                <h3 className="text-lg font-bold text-white">Client Test - Run from Your Computer</h3>
+                            </div>
+                            
+                            <p className="text-slate-300 text-sm mb-4">
+                                For the most accurate results, run the test from your local computer. Results will appear here automatically.
+                            </p>
+                            
+                            <div className="bg-slate-900/50 rounded-lg p-4 border border-slate-700">
+                                <div className="flex items-center justify-between mb-3">
+                                    <span className="text-slate-400 text-sm font-medium">Your Session ID:</span>
+                                    <div className="flex items-center gap-2">
+                                        <span className="text-3xl font-mono font-bold text-emerald-400">{sessionId}</span>
+                                    </div>
+                                </div>
+                                
+                                <div className="space-y-3">
+                                    <div>
+                                        <div className="text-xs text-slate-400 mb-1">Windows:</div>
+                                        <div className="bg-slate-800 rounded p-2 font-mono text-sm text-cyan-300 break-all">
+                                            sip-alg-tester-win.exe --report {sessionId}
+                                        </div>
+                                    </div>
+                                    <div>
+                                        <div className="text-xs text-slate-400 mb-1">Linux/macOS:</div>
+                                        <div className="bg-slate-800 rounded p-2 font-mono text-sm text-cyan-300 break-all">
+                                            ./sip-alg-tester-linux --report {sessionId}
+                                        </div>
+                                    </div>
+                                </div>
+                                
+                                <div className="mt-4 pt-4 border-t border-slate-700">
+                                    <div className="flex items-start gap-2 text-xs text-slate-400">
+                                        <Info className="w-4 h-4 flex-shrink-0 mt-0.5" />
+                                        <p>Download the test tool below, then run it with your Session ID. Results will appear on this page automatically.</p>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            {/* Client Test Result Display */}
+                            {clientTestReceived && clientTestResult && (
+                                <div className="mt-4 p-4 bg-slate-900/50 border border-emerald-700 rounded-lg">
+                                    <div className="flex items-center gap-2 text-emerald-400 font-semibold mb-3">
+                                        <CheckCircle className="w-5 h-5" />
+                                        Client Test Results Received
+                                    </div>
+                                    <div className="space-y-2">
+                                        {Object.entries(clientTestResult.ports || {}).map(([port, portResult]) => (
+                                            <div key={port} className="space-y-1">
+                                                {/* UDP Result */}
+                                                {portResult.udp && (
+                                                    <div className="flex items-center justify-between p-3 bg-slate-800/50 rounded">
+                                                        <span className="text-slate-300 text-sm">
+                                                            Port {port} (UDP)
+                                                        </span>
+                                                        <div className={`flex items-center gap-2 ${getResultColor(portResult.udp?.code)}`}>
+                                                            {getResultIcon(portResult.udp?.code)}
+                                                            <span className="font-semibold">{portResult.udp?.text || 'Unknown'}</span>
+                                                        </div>
+                                                    </div>
+                                                )}
+                                                {/* TCP Result */}
+                                                {portResult.tcp && (
+                                                    <div className="flex items-center justify-between p-3 bg-slate-800/50 rounded">
+                                                        <span className="text-slate-300 text-sm">
+                                                            Port {port} (TCP)
+                                                        </span>
+                                                        <div className={`flex items-center gap-2 ${getResultColor(portResult.tcp?.code)}`}>
+                                                            {getResultIcon(portResult.tcp?.code)}
+                                                            <span className="font-semibold">{portResult.tcp?.text || 'Unknown'}</span>
+                                                        </div>
+                                                    </div>
+                                                )}
+                                            </div>
+                                        ))}
+                                    </div>
+                                    
+                                    {/* Overall Result */}
+                                    <div className="mt-4 pt-4 border-t border-slate-700">
+                                        {clientTestResult.returnCode === 1 && (
+                                            <div className="flex items-center gap-2 text-green-400">
+                                                <CheckCircle className="w-5 h-5" />
+                                                <span className="font-semibold">No ALG Detected</span>
+                                            </div>
+                                        )}
+                                        {clientTestResult.returnCode === 2 && (
+                                            <div className="flex items-center gap-2 text-red-400">
+                                                <AlertTriangle className="w-5 h-5" />
+                                                <span className="font-semibold">ALG Detected</span>
+                                            </div>
+                                        )}
+                                        {clientTestResult.returnCode === 4 && (
+                                            <div className="flex items-center gap-2 text-yellow-400">
+                                                <XCircle className="w-5 h-5" />
+                                                <span className="font-semibold">Test Failed</span>
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+                    )}
 
                     {/* Server-Side Test Section */}
                     <div className="bg-slate-800 rounded-xl border border-slate-700 p-6 shadow-lg">
@@ -368,8 +494,8 @@
                                 </h4>
                                 <ol className="list-decimal list-inside space-y-1 text-slate-300 pl-2">
                                     <li>Download <code className="bg-slate-900/50 px-1 rounded text-xs">sip-alg-tester-win.exe</code></li>
-                                    <li>Double-click to run (no command needed)</li>
-                                    <li className="text-slate-500">Or via Command Prompt: <code className="bg-slate-900/50 px-2 py-1 rounded text-xs">sip-alg-tester-win.exe</code></li>
+                                    <li>Run with your Session ID: <code className="bg-slate-900/50 px-2 py-1 rounded text-xs">sip-alg-tester-win.exe --report YOUR_SESSION_ID</code></li>
+                                    <li className="text-slate-500">Or run standalone (results in console only): <code className="bg-slate-900/50 px-2 py-1 rounded text-xs">sip-alg-tester-win.exe</code></li>
                                 </ol>
                             </div>
 
@@ -381,8 +507,8 @@
                                 </h4>
                                 <ol className="list-decimal list-inside space-y-1 text-slate-300 pl-2">
                                     <li>Download <code className="bg-slate-900/50 px-1 rounded text-xs">sip-alg-tester-linux</code></li>
-                                    <li>Open Terminal and make executable: <code className="bg-slate-900/50 px-2 py-1 rounded text-xs">chmod +x sip-alg-tester-linux</code></li>
-                                    <li>Run: <code className="bg-slate-900/50 px-2 py-1 rounded text-xs">./sip-alg-tester-linux</code></li>
+                                    <li>Make executable: <code className="bg-slate-900/50 px-2 py-1 rounded text-xs">chmod +x sip-alg-tester-linux</code></li>
+                                    <li>Run with your Session ID: <code className="bg-slate-900/50 px-2 py-1 rounded text-xs">./sip-alg-tester-linux --report YOUR_SESSION_ID</code></li>
                                 </ol>
                             </div>
 
@@ -394,8 +520,8 @@
                                 </h4>
                                 <ol className="list-decimal list-inside space-y-1 text-slate-300 pl-2">
                                     <li>Download <code className="bg-slate-900/50 px-1 rounded text-xs">sip-alg-tester-macos</code></li>
-                                    <li>Open Terminal and make executable: <code className="bg-slate-900/50 px-2 py-1 rounded text-xs">chmod +x sip-alg-tester-macos</code></li>
-                                    <li>Run: <code className="bg-slate-900/50 px-2 py-1 rounded text-xs">./sip-alg-tester-macos</code></li>
+                                    <li>Make executable: <code className="bg-slate-900/50 px-2 py-1 rounded text-xs">chmod +x sip-alg-tester-macos</code></li>
+                                    <li>Run with your Session ID: <code className="bg-slate-900/50 px-2 py-1 rounded text-xs">./sip-alg-tester-macos --report YOUR_SESSION_ID</code></li>
                                 </ol>
                             </div>
                         </div>
@@ -470,6 +596,7 @@
             const [ws, setWs] = useState(null);
             const [wsConnected, setWsConnected] = useState(false);
             const [wsError, setWsError] = useState(null);
+            const [sessionId, setSessionId] = useState(null);
 
             // Refs
             const intervalRef = useRef(null);
@@ -506,9 +633,20 @@
                         const data = JSON.parse(event.data);
                         console.log('WebSocket message received:', data);
                         
+                        // Handle session ID assignment
+                        if (data.type === 'SESSION_ID') {
+                            setSessionId(data.sessionId);
+                            console.log('Session ID received:', data.sessionId);
+                        }
+                        
                         // Dispatch custom event for ALG test results
                         if (data.type === 'ALG_RESULT') {
                             window.dispatchEvent(new CustomEvent('algTestResult', { detail: data }));
+                        }
+                        
+                        // Dispatch custom event for client test results
+                        if (data.type === 'CLIENT_TEST_RESULT') {
+                            window.dispatchEvent(new CustomEvent('clientTestResult', { detail: data }));
                         }
                     } catch (error) {
                         console.error('Error parsing WebSocket message:', error);
@@ -752,7 +890,7 @@
                         </div>
 
                         {/* SIP ALG Tab Content */}
-                        {activeTab === 'alg' && <SipAlgTest ws={ws} wsConnected={wsConnected} />}
+                        {activeTab === 'alg' && <SipAlgTest ws={ws} wsConnected={wsConnected} sessionId={sessionId} />}
 
                         {/* VoIP Tab Content */}
                         {activeTab === 'voip' && (
