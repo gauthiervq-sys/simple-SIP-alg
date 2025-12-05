@@ -105,7 +105,7 @@ To accurately detect SIP ALG modifications, the test **must be run from your loc
    - Windows: `sip-alg-tester-win.exe`
    - Linux: `sip-alg-tester-linux`
    - macOS: `sip-alg-tester-macos`
-4. Run the downloaded tool from your PC (no arguments needed - connects to 193.105.36.15 by default):
+4. Run the downloaded tool from your PC:
 
 **Windows:**
 ```cmd
@@ -118,10 +118,25 @@ chmod +x sip-alg-tester-linux  # or sip-alg-tester-macos
 ./sip-alg-tester-linux
 ```
 
+5. When prompted, enter the Report ID shown in your browser (a 4-digit number displayed on the web interface)
+6. The test will run automatically and results will appear in your browser in real-time
+
+**Important:** The tool will now prompt you to enter the Report ID interactively when it starts. Simply:
+- Open the web interface first to see your Report ID
+- Run the executable (no command-line arguments needed)
+- Enter your Report ID when prompted
+- Watch the results appear in your browser
+
 To test a different server, you can optionally provide the server IP:
 ```bash
 sip-alg-tester-win.exe <server-ip>
 ./sip-alg-tester-linux <server-ip>
+```
+
+For backward compatibility, you can still use the `--report` flag:
+```bash
+sip-alg-tester-win.exe --report 1234
+./sip-alg-tester-linux --report 1234
 ```
 
 #### Alternative: Using Node.js Directly
@@ -134,7 +149,7 @@ node client-tester.js [server-ip] [ports]
 
 Examples:
 ```bash
-# Connect to default server (193.105.36.15)
+# Connect to default server (193.105.36.15) - will prompt for Report ID
 node client-tester.js
 
 # Connect to specific server
@@ -142,6 +157,9 @@ node client-tester.js 192.168.1.100
 
 # Connect to specific server with custom ports
 node client-tester.js 193.105.36.15 5060,5062
+
+# Use --report flag to skip interactive prompt
+node client-tester.js --report 1234
 ```
 
 ### Automatic Backend Runtime (Production)
