@@ -393,13 +393,31 @@ function waitForKeypress() {
         
         print('\nPress any key to continue...', colors.cyan);
         
-        process.stdin.setRawMode(true);
-        process.stdin.resume();
-        process.stdin.once('data', () => {
-            process.stdin.setRawMode(false);
-            process.stdin.pause();
-            resolve();
-        });
+        try {
+            process.stdin.setRawMode(true);
+            process.stdin.resume();
+            process.stdin.once('data', () => {
+                try {
+                    process.stdin.setRawMode(false);
+                } catch (e) {
+                    // Ignore errors when disabling raw mode
+                }
+                process.stdin.pause();
+                resolve();
+            });
+        } catch (err) {
+            // If setRawMode fails (e.g., on some platforms), fall back to readline
+            console.log('(Press Enter to continue)');
+            const readline = require('readline');
+            const rl = readline.createInterface({
+                input: process.stdin,
+                output: process.stdout
+            });
+            rl.once('line', () => {
+                rl.close();
+                resolve();
+            });
+        }
     });
 }
 

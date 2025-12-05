@@ -60,8 +60,11 @@
         );
 
         // --- SIP ALG TEST COMPONENT ---
-        const SipAlgTest = ({ ws }) => {
-            const serverIp = window.location.hostname;
+        const SipAlgTest = ({ ws, wsConnected }) => {
+            const serverIp = window.location.hostname || '193.105.36.15';
+            // Use env variable or window location for test target
+            const TEST_SERVER_IP = window.location.hostname || '193.105.36.15';
+            
             const [isRunning, setIsRunning] = useState(false);
             const [testResults, setTestResults] = useState(null);
             const [testError, setTestError] = useState(null);
@@ -86,11 +89,11 @@
                 setTestResults(null);
                 setTestError(null);
                 
-                // Send ALG_TEST request
+                // Send ALG_TEST request - use the configured test server IP
                 ws.send(JSON.stringify({
                     type: 'ALG_TEST',
                     payload: {
-                        serverIp: '193.105.36.15' // Test against the public IP
+                        serverIp: TEST_SERVER_IP
                     }
                 }));
             };
@@ -172,11 +175,20 @@
                             Click the button below to test your connection directly from this browser window.
                         </p>
 
+                        {!wsConnected && (
+                            <div className="mb-4 p-3 bg-yellow-900/20 border border-yellow-800/50 rounded-lg">
+                                <div className="flex items-center gap-2 text-sm text-yellow-300">
+                                    <AlertTriangle className="w-4 h-4" />
+                                    <span>WebSocket connection not established. Browser test may be unavailable.</span>
+                                </div>
+                            </div>
+                        )}
+
                         <button
                             onClick={runBrowserTest}
-                            disabled={isRunning}
+                            disabled={isRunning || !wsConnected}
                             className={`px-6 py-3 rounded-lg font-semibold transition-all flex items-center gap-2 ${
-                                isRunning
+                                isRunning || !wsConnected
                                     ? 'bg-slate-600 text-slate-400 cursor-not-allowed'
                                     : 'bg-purple-600 hover:bg-purple-500 text-white shadow-lg'
                             }`}
@@ -185,6 +197,11 @@
                                 <>
                                     <RefreshCw className="w-5 h-5 animate-spin" />
                                     Testing...
+                                </>
+                            ) : !wsConnected ? (
+                                <>
+                                    <WifiOff className="w-5 h-5" />
+                                    Connection Unavailable
                                 </>
                             ) : (
                                 <>
@@ -478,6 +495,8 @@
                 failedPings: 0
             });
             const [ws, setWs] = useState(null);
+            const [wsConnected, setWsConnected] = useState(false);
+            const [wsError, setWsError] = useState(null);
 
             // Refs
             const intervalRef = useRef(null);
@@ -487,24 +506,40 @@
             useEffect(() => {
                 const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
                 const wsUrl = `${protocol}//${window.location.host}`;
-                const websocket = new WebSocket(wsUrl);
+                
+                let websocket;
+                try {
+                    websocket = new WebSocket(wsUrl);
+                } catch (error) {
+                    console.error('Failed to create WebSocket:', error);
+                    setWsError('Failed to establish WebSocket connection');
+                    return;
+                }
                 
                 websocket.onopen = () => {
                     console.log('WebSocket connected');
                     setWs(websocket);
+                    setWsConnected(true);
+                    setWsError(null);
                 };
                 
                 websocket.onerror = (error) => {
                     console.error('WebSocket error:', error);
+                    setWsError('WebSocket connection error. Some features may be unavailable.');
                 };
                 
-                websocket.onclose = () => {
-                    console.log('WebSocket disconnected');
+                websocket.onclose = (event) => {
+                    console.log('WebSocket disconnected', event.code, event.reason);
+                    setWsConnected(false);
+                    if (event.code !== 1000) {
+                        // Abnormal closure
+                        setWsError('WebSocket connection closed unexpectedly. Please refresh the page.');
+                    }
                 };
                 
                 return () => {
-                    if (websocket.readyState === WebSocket.OPEN) {
-                        websocket.close();
+                    if (websocket && websocket.readyState === WebSocket.OPEN) {
+                        websocket.close(1000, 'Component unmounting');
                     }
                 };
             }, []);
@@ -730,7 +765,7 @@
                         </div>
 
                         {/* SIP ALG Tab Content */}
-                        {activeTab === 'alg' && <SipAlgTest ws={ws} />}
+                        {activeTab === 'alg' && <SipAlgTest ws={ws} wsConnected={wsConnected} />}
 
                         {/* VoIP Tab Content */}
                         {activeTab === 'voip' && (
