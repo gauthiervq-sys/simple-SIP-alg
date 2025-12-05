@@ -24,9 +24,10 @@ const OPEN_STATE = 1; // WebSocket.OPEN constant value, used for both WebSocket 
 // Session management: Map session IDs to WebSocket connections
 const sessionConnections = new Map(); // sessionId -> WebSocket
 
-// Generate unique 4-digit session ID
+// Generate unique 4-digit session ID using crypto for better security
 function generateSessionId() {
-    return Math.floor(1000 + Math.random() * 9000).toString();
+    // Generate random number between 1000 and 9999
+    return crypto.randomInt(1000, 10000).toString();
 }
 
 // Middleware for parsing JSON

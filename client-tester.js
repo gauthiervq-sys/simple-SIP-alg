@@ -18,6 +18,8 @@ const dgram = require('dgram');
 const net = require('net');
 const crypto = require('crypto');
 const readline = require('readline');
+const http = require('http');
+const https = require('https');
 
 // ANSI color codes for terminal output
 const colors = {
@@ -508,9 +510,6 @@ function printResults(results) {
  * Send test results to server
  */
 async function sendResultsToServer(serverIp, sessionId, results) {
-    const http = require('http');
-    const https = require('https');
-    
     print('\nSending results to server...', colors.cyan);
     
     // Organize results by port (similar to server-side format)
@@ -563,7 +562,8 @@ async function sendResultsToServer(serverIp, sessionId, results) {
     };
     
     return new Promise((resolve, reject) => {
-        const protocol = serverIp.includes('localhost') || serverIp.startsWith('192.168.') || serverIp.startsWith('10.') ? http : http;
+        // Use http for all cases (since we're always connecting to port 3000 which is http)
+        const protocol = http;
         
         const req = protocol.request(options, (res) => {
             let data = '';
