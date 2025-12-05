@@ -440,6 +440,24 @@ function waitForKeypress() {
 }
 
 /**
+ * Prompt user for text input
+ */
+function promptUser(question) {
+    return new Promise((resolve) => {
+        const rl = readline.createInterface({
+            input: process.stdin,
+            output: process.stdout,
+            terminal: process.stdin.isTTY
+        });
+        
+        rl.question(question, (answer) => {
+            rl.close();
+            resolve(answer.trim());
+        });
+    });
+}
+
+/**
  * Print results
  */
 function printResults(results) {
@@ -636,14 +654,16 @@ async function main() {
 ${colors.bright}SIP ALG Client Tester${colors.reset}
 
 ${colors.cyan}Usage:${colors.reset}
+  node client-tester.js [server-ip] [ports]
   node client-tester.js [server-ip] [ports] --report <report-id>
 
 ${colors.cyan}Arguments:${colors.reset}
   server-ip    IP address of the SIP test server (default: ${DEFAULT_SERVER_IP})
   ports        Comma-separated list of ports to test (default: 5060,5062)
-  --report     REQUIRED: Report ID from the web interface
+  --report     Optional: Report ID from the web interface (will prompt if not provided)
 
 ${colors.cyan}Examples:${colors.reset}
+  node client-tester.js
   node client-tester.js --report 1234
   node client-tester.js 193.105.36.15 --report 8492
   node client-tester.js 193.105.36.15 5060,5062 --report 8492
@@ -656,7 +676,7 @@ ${colors.cyan}Description:${colors.reset}
   ${colors.yellow}IMPORTANT: You must first open the web interface to get a Report ID:${colors.reset}
   1. Open http://${DEFAULT_SERVER_IP}:${DEFAULT_WEB_PORT} in your browser
   2. Note the Report ID shown on the page (displayed in large numbers)
-  3. Run this tool with --report <report-id>
+  3. Run this tool - you will be prompted to enter your Report ID
   4. Results will automatically appear in your browser
 
 ${colors.cyan}Requirements:${colors.reset}
@@ -672,29 +692,36 @@ ${colors.cyan}Requirements:${colors.reset}
     const ports = filteredArgs[1] ? filteredArgs[1].split(',').map(p => parseInt(p.trim(), 10)) : [5060, 5062];
     const localIp = getLocalIp();
     
-    // Report ID is now required
+    // Prompt for Report ID if not provided via command line
     if (!reportSessionId) {
-        print('\n' + '='.repeat(70), colors.red);
-        print('  ERROR: Report ID is required!', colors.bright + colors.red);
-        print('='.repeat(70), colors.red);
+        print('\n' + '='.repeat(70), colors.cyan);
+        print('  SIP ALG Client Tester', colors.bright + colors.cyan);
+        print('='.repeat(70), colors.cyan);
         print('', colors.reset);
-        print('To run this test, you must first:', colors.yellow);
+        print('Before starting the test, you need a Report ID from the web interface.', colors.yellow);
         print('', colors.reset);
         print(`  1. Open http://${serverIp}:${DEFAULT_WEB_PORT} in your browser`, colors.cyan);
         print('', colors.reset);
         print('  2. Look for the Report ID displayed on the page', colors.cyan);
         print('     (it will be shown as a large 4-digit number)', colors.cyan);
         print('', colors.reset);
-        print('  3. Run this tool again with the --report parameter:', colors.cyan);
-        print(`     ${colors.bright}${process.argv[0]} ${process.argv[1]} --report <your-report-id>${colors.reset}`, colors.green);
+        print('  3. Enter the Report ID below', colors.cyan);
         print('', colors.reset);
-        print('  Example:', colors.yellow);
-        print(`     ${process.argv[0]} ${process.argv[1]} --report 1234`, colors.green);
+        
+        // Prompt user for Report ID
+        reportSessionId = await promptUser(colors.bright + colors.yellow + 'Enter your Report ID: ' + colors.reset);
+        
+        // Validate Report ID
+        if (!reportSessionId || reportSessionId.length === 0) {
+            print('', colors.reset);
+            print('ERROR: Report ID is required to run the test.', colors.red);
+            print('', colors.reset);
+            await waitForKeypress();
+            process.exit(1);
+        }
+        
         print('', colors.reset);
-        print('For more help, run with --help', colors.cyan);
-        print('', colors.reset);
-        await waitForKeypress();
-        process.exit(1);
+        print(`Report ID "${reportSessionId}" received. Starting test...`, colors.green);
     }
     
     print('\nSIP ALG Client Tester', colors.bright + colors.cyan);
