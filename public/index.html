@@ -60,8 +60,13 @@
         );
 
         // --- SIP ALG TEST COMPONENT ---
-        const SipAlgTest = () => {
-            const serverIp = window.location.hostname;
+        const SipAlgTest = ({ ws, wsConnected }) => {
+            // Use window location hostname for test target, fallback to configured server
+            const TEST_SERVER_IP = window.location.hostname || '193.105.36.15';
+            
+            const [isRunning, setIsRunning] = useState(false);
+            const [testResults, setTestResults] = useState(null);
+            const [testError, setTestError] = useState(null);
             
             const getDownloadUrl = (platform) => {
                 const baseUrl = window.location.origin;
@@ -71,6 +76,61 @@
                     'macos': '-macos'
                 };
                 return `${baseUrl}/downloads/sip-alg-tester${extensions[platform]}`;
+            };
+
+            const runBrowserTest = () => {
+                if (!ws || ws.readyState !== WebSocket.OPEN) {
+                    setTestError('WebSocket connection not available. Please refresh the page.');
+                    return;
+                }
+                
+                setIsRunning(true);
+                setTestResults(null);
+                setTestError(null);
+                
+                // Send ALG_TEST request - use the configured test server IP
+                ws.send(JSON.stringify({
+                    type: 'ALG_TEST',
+                    payload: {
+                        serverIp: TEST_SERVER_IP
+                    }
+                }));
+            };
+
+            // Listen for ALG test results
+            useEffect(() => {
+                if (!ws) return;
+                
+                const handleMessage = (event) => {
+                    try {
+                        const data = JSON.parse(event.data);
+                        if (data.type === 'ALG_RESULT') {
+                            setIsRunning(false);
+                            if (data.error) {
+                                setTestError(data.error);
+                            } else {
+                                setTestResults(data.result);
+                            }
+                        }
+                    } catch (e) {
+                        console.error('Failed to parse WebSocket message:', e);
+                    }
+                };
+                
+                ws.addEventListener('message', handleMessage);
+                return () => ws.removeEventListener('message', handleMessage);
+            }, [ws]);
+
+            const getResultColor = (code) => {
+                if (code === 1) return 'text-green-500'; // FALSE - No ALG
+                if (code === 2) return 'text-red-500';   // TRUE - ALG detected
+                return 'text-yellow-500';                // FAILED
+            };
+
+            const getResultIcon = (code) => {
+                if (code === 1) return <CheckCircle className="w-5 h-5" />;
+                if (code === 2) return <AlertTriangle className="w-5 h-5" />;
+                return <XCircle className="w-5 h-5" />;
             };
 
             return (
@@ -91,17 +151,166 @@
                         <div className="mt-4 p-4 bg-blue-900/20 border border-blue-800/50 rounded-lg">
                             <h4 className="text-blue-400 font-semibold mb-2 flex items-center gap-2">
                                 <Info className="w-4 h-4" />
-                                Important: Client-Side Testing Required
+                                Testing Options
                             </h4>
                             <p className="text-sm text-slate-300 leading-relaxed mb-3">
-                                To accurately detect SIP ALG modifications, the test must run from <strong>your local computer</strong> to this server.
-                                This ensures the SIP packets pass through your router where ALG modifications occur.
+                                You can test for SIP ALG in two ways:
                             </p>
-                            <p className="text-sm text-slate-300 leading-relaxed">
-                                Download and run the test tool on your PC to check your network's SIP ALG status. 
-                                The tool is pre-configured to test against server <strong>193.105.36.15</strong> - simply run the executable without any arguments.
-                            </p>
+                            <ul className="text-sm text-slate-300 space-y-2 list-disc list-inside">
+                                <li><strong>Browser Test (Quick):</strong> Run the test directly from this page. Best for quick checks.</li>
+                                <li><strong>Download Test Tool (Recommended):</strong> For most accurate results, download and run the standalone executable from your computer.</li>
+                            </ul>
                         </div>
+                    </div>
+
+                    {/* Browser Test Section */}
+                    <div className="bg-slate-800 rounded-xl border border-slate-700 p-6 shadow-lg">
+                        <div className="flex items-center gap-3 mb-4">
+                            <Activity className="w-6 h-6 text-blue-500" />
+                            <h3 className="text-lg font-bold text-white">Run Test from Browser</h3>
+                        </div>
+                        
+                        <p className="text-slate-400 text-sm mb-4">
+                            Click the button below to test your connection directly from this browser window.
+                        </p>
+
+                        {!wsConnected && (
+                            <div className="mb-4 p-3 bg-yellow-900/20 border border-yellow-800/50 rounded-lg">
+                                <div className="flex items-center gap-2 text-sm text-yellow-300">
+                                    <AlertTriangle className="w-4 h-4" />
+                                    <span>WebSocket connection not established. Browser test may be unavailable.</span>
+                                </div>
+                            </div>
+                        )}
+
+                        <button
+                            onClick={runBrowserTest}
+                            disabled={isRunning || !wsConnected}
+                            className={`px-6 py-3 rounded-lg font-semibold transition-all flex items-center gap-2 ${
+                                isRunning || !wsConnected
+                                    ? 'bg-slate-600 text-slate-400 cursor-not-allowed'
+                                    : 'bg-purple-600 hover:bg-purple-500 text-white shadow-lg'
+                            }`}
+                        >
+                            {isRunning ? (
+                                <>
+                                    <RefreshCw className="w-5 h-5 animate-spin" />
+                                    Testing...
+                                </>
+                            ) : !wsConnected ? (
+                                <>
+                                    <WifiOff className="w-5 h-5" />
+                                    Connection Unavailable
+                                </>
+                            ) : (
+                                <>
+                                    <Shield className="w-5 h-5" />
+                                    Run SIP ALG Test
+                                </>
+                            )}
+                        </button>
+
+                        {/* Test Results */}
+                        {testResults && (
+                            <div className="mt-6 space-y-4">
+                                <div className="border-t border-slate-700 pt-6">
+                                    <h4 className="text-white font-semibold mb-4 flex items-center gap-2">
+                                        <Info className="w-5 h-5 text-cyan-500" />
+                                        Test Results
+                                    </h4>
+                                    
+                                    {/* Overall Result */}
+                                    <div className="mb-4 p-4 bg-slate-900/50 rounded-lg border border-slate-700">
+                                        <div className="flex items-center gap-3">
+                                            <div className={getResultColor(testResults.returnCode)}>
+                                                {getResultIcon(testResults.returnCode)}
+                                            </div>
+                                            <div>
+                                                <div className={`text-lg font-bold ${getResultColor(testResults.returnCode)}`}>
+                                                    {testResults.returnCode === 1 && 'No ALG Detected'}
+                                                    {testResults.returnCode === 2 && 'ALG Detected!'}
+                                                    {testResults.returnCode === 4 && 'Test Failed'}
+                                                </div>
+                                                <div className="text-sm text-slate-400">
+                                                    {testResults.returnCode === 1 && 'Your router is not modifying SIP packets. Ideal for VoIP.'}
+                                                    {testResults.returnCode === 2 && 'Your router is modifying SIP packets. This can cause VoIP issues.'}
+                                                    {testResults.returnCode === 4 && 'Unable to complete test. Check network/firewall settings.'}
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    {/* Per-Port Results */}
+                                    <div className="space-y-3">
+                                        {Object.entries(testResults.ports).map(([port, portResult]) => (
+                                            <div key={port} className="bg-slate-900/50 rounded-lg border border-slate-700 p-4">
+                                                <h5 className="text-white font-semibold mb-3">Port {port}</h5>
+                                                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                                    {/* UDP Result */}
+                                                    <div className="flex items-center justify-between p-2 bg-slate-800/50 rounded">
+                                                        <span className="text-slate-300">UDP</span>
+                                                        <div className={`flex items-center gap-2 ${getResultColor(portResult.udp.code)}`}>
+                                                            <span className="font-semibold">{portResult.udp.text}</span>
+                                                            {getResultIcon(portResult.udp.code)}
+                                                        </div>
+                                                    </div>
+                                                    {/* TCP Result */}
+                                                    <div className="flex items-center justify-between p-2 bg-slate-800/50 rounded">
+                                                        <span className="text-slate-300">TCP</span>
+                                                        <div className={`flex items-center gap-2 ${getResultColor(portResult.tcp.code)}`}>
+                                                            <span className="font-semibold">{portResult.tcp.text}</span>
+                                                            {getResultIcon(portResult.tcp.code)}
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                                {/* Show differences if ALG detected */}
+                                                {(portResult.udp.diff || portResult.tcp.diff) && (
+                                                    <div className="mt-3 p-3 bg-red-900/20 border border-red-800/50 rounded text-xs">
+                                                        <div className="text-red-400 font-semibold mb-1">Modifications Detected:</div>
+                                                        {portResult.udp.diff && (
+                                                            <div className="mb-2">
+                                                                <div className="text-slate-400">UDP:</div>
+                                                                <pre className="text-slate-300 whitespace-pre-wrap mt-1">{portResult.udp.diff}</pre>
+                                                            </div>
+                                                        )}
+                                                        {portResult.tcp.diff && (
+                                                            <div>
+                                                                <div className="text-slate-400">TCP:</div>
+                                                                <pre className="text-slate-300 whitespace-pre-wrap mt-1">{portResult.tcp.diff}</pre>
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                )}
+                                                {/* Show errors if test failed */}
+                                                {(portResult.udp.error || portResult.tcp.error) && (
+                                                    <div className="mt-3 p-3 bg-yellow-900/20 border border-yellow-800/50 rounded text-xs">
+                                                        {portResult.udp.error && (
+                                                            <div className="text-yellow-300">UDP: {portResult.udp.error}</div>
+                                                        )}
+                                                        {portResult.tcp.error && (
+                                                            <div className="text-yellow-300">TCP: {portResult.tcp.error}</div>
+                                                        )}
+                                                    </div>
+                                                )}
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+
+                        {/* Test Error */}
+                        {testError && (
+                            <div className="mt-6 p-4 bg-red-900/20 border border-red-800/50 rounded-lg">
+                                <div className="flex items-start gap-3">
+                                    <XCircle className="w-5 h-5 text-red-400 flex-shrink-0 mt-0.5" />
+                                    <div>
+                                        <div className="text-red-400 font-semibold mb-1">Test Error</div>
+                                        <div className="text-sm text-slate-300">{testError}</div>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
                     </div>
 
                     {/* Download Options */}
@@ -246,7 +455,7 @@
                             </summary>
                             <div className="mt-4 space-y-3 text-sm text-slate-400">
                                 <p>
-                                    <strong className="text-slate-300">Server IP:</strong> {serverIp}
+                                    <strong className="text-slate-300">Server IP:</strong> {TEST_SERVER_IP}
                                 </p>
                                 <p>
                                     <strong className="text-slate-300">Test Ports:</strong> 5060, 5062 (UDP and TCP)
@@ -284,10 +493,55 @@
                 totalPings: 0,
                 failedPings: 0
             });
+            const [ws, setWs] = useState(null);
+            const [wsConnected, setWsConnected] = useState(false);
+            const [wsError, setWsError] = useState(null);
 
             // Refs
             const intervalRef = useRef(null);
             const logsRef = useRef([]);
+
+            // Initialize WebSocket
+            useEffect(() => {
+                const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+                const wsUrl = `${protocol}//${window.location.host}`;
+                
+                let websocket;
+                try {
+                    websocket = new WebSocket(wsUrl);
+                } catch (error) {
+                    console.error('Failed to create WebSocket:', error);
+                    setWsError('Failed to establish WebSocket connection');
+                    return;
+                }
+                
+                websocket.onopen = () => {
+                    console.log('WebSocket connected');
+                    setWs(websocket);
+                    setWsConnected(true);
+                    setWsError(null);
+                };
+                
+                websocket.onerror = (error) => {
+                    console.error('WebSocket error:', error);
+                    setWsError('WebSocket connection error. Some features may be unavailable.');
+                };
+                
+                websocket.onclose = (event) => {
+                    console.log('WebSocket disconnected', event.code, event.reason);
+                    setWsConnected(false);
+                    if (event.code !== 1000) {
+                        // Abnormal closure
+                        setWsError('WebSocket connection closed unexpectedly. Please refresh the page.');
+                    }
+                };
+                
+                return () => {
+                    if (websocket && websocket.readyState === WebSocket.OPEN) {
+                        websocket.close(1000, 'Component unmounting');
+                    }
+                };
+            }, []);
 
             // Configuration
             const PING_INTERVAL = 1000;
@@ -510,7 +764,7 @@
                         </div>
 
                         {/* SIP ALG Tab Content */}
-                        {activeTab === 'alg' && <SipAlgTest />}
+                        {activeTab === 'alg' && <SipAlgTest ws={ws} wsConnected={wsConnected} />}
 
                         {/* VoIP Tab Content */}
                         {activeTab === 'voip' && (

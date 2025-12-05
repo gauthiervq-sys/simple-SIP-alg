@@ -17,6 +17,7 @@
 const dgram = require('dgram');
 const net = require('net');
 const crypto = require('crypto');
+const readline = require('readline');
 
 // ANSI color codes for terminal output
 const colors = {
@@ -381,6 +382,46 @@ function print(text, color = '') {
 }
 
 /**
+ * Wait for user input (Windows CMD pause functionality)
+ */
+function waitForKeypress() {
+    return new Promise((resolve) => {
+        // Check if we're in an interactive terminal (not piped)
+        if (!process.stdin.isTTY) {
+            resolve();
+            return;
+        }
+        
+        print('\nPress any key to continue...', colors.cyan);
+        
+        try {
+            process.stdin.setRawMode(true);
+            process.stdin.resume();
+            process.stdin.once('data', () => {
+                try {
+                    process.stdin.setRawMode(false);
+                } catch (e) {
+                    // Ignore errors when disabling raw mode
+                }
+                process.stdin.pause();
+                resolve();
+            });
+        } catch (err) {
+            // If setRawMode fails (e.g., on some platforms), fall back to readline
+            console.log('(Press Enter to continue)');
+            const rl = readline.createInterface({
+                input: process.stdin,
+                output: process.stdout
+            });
+            rl.once('line', () => {
+                rl.close();
+                resolve();
+            });
+        }
+    });
+}
+
+/**
  * Print results
  */
 function printResults(results) {
@@ -512,6 +553,9 @@ ${colors.cyan}Requirements:${colors.reset}
         const results = await Promise.all(allTests);
         printResults(results);
         
+        // Wait for keypress before exiting (especially important for Windows .exe)
+        await waitForKeypress();
+        
         // Exit with appropriate code
         const hasAlg = results.some(r => r.code === RESULT_CODES.TRUE.code);
         const hasFailed = results.some(r => r.code === RESULT_CODES.FAILED.code);
@@ -525,6 +569,7 @@ ${colors.cyan}Requirements:${colors.reset}
         }
     } catch (error) {
         print(`\nError: ${error.message}`, colors.red);
+        await waitForKeypress();
         process.exit(1);
     }
 }
