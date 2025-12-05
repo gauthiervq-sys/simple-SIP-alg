@@ -277,7 +277,7 @@ function testUdp(localIp, serverIp, serverPort, timeout = 10000) {
         });
         
         try {
-            socket.bind(0, localIp, () => {
+            socket.bind(0, '0.0.0.0', () => {
                 try {
                     const localPort = socket.address().port;
                     sipData = buildSipInvite(localIp, localPort, serverIp, serverPort, 'UDP');
