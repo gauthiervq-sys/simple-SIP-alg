@@ -9,7 +9,7 @@ echo ""
 # Check if pkg is installed
 if ! command -v pkg &> /dev/null; then
     echo "pkg is not installed. Installing..."
-    npm install -g pkg
+    npm install -g pkg || npm install --save-dev pkg
 fi
 
 # Create output directory
@@ -17,6 +17,10 @@ mkdir -p public/downloads
 mkdir -p dist
 
 echo "Compiling executables..."
+echo ""
+echo "Note: Executables are pre-configured to connect to 193.105.36.15"
+echo "      Users can run them without any command-line arguments."
+echo ""
 
 # Build for each platform
 echo "  - Building for Windows (x64)..."
@@ -34,5 +38,6 @@ echo ""
 ls -lh public/downloads/
 echo ""
 echo "To test the client locally, run:"
-echo "  node client-tester.js <server-ip>"
+echo "  node client-tester.js          (connects to 193.105.36.15 by default)"
+echo "  node client-tester.js <ip>     (to test a different server)"
 echo ""

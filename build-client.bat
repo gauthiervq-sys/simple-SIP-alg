@@ -9,6 +9,9 @@ where pkg >nul 2>nul
 if %errorlevel% neq 0 (
     echo pkg is not installed. Installing...
     npm install -g pkg
+    if %errorlevel% neq 0 (
+        npm install --save-dev pkg
+    )
 )
 
 REM Create output directories
@@ -16,6 +19,10 @@ if not exist "public\downloads" mkdir "public\downloads"
 if not exist "dist" mkdir "dist"
 
 echo Compiling executables...
+echo.
+echo Note: Executables are pre-configured to connect to 193.105.36.15
+echo       Users can run them without any command-line arguments.
+echo.
 
 echo   - Building for Windows (x64)...
 call pkg client-tester.js --targets node18-win-x64 --output public/downloads/sip-alg-tester-win.exe
@@ -32,6 +39,7 @@ echo.
 dir /B public\downloads\
 echo.
 echo To test the client locally, run:
-echo   node client-tester.js ^<server-ip^>
+echo   node client-tester.js          (connects to 193.105.36.15 by default)
+echo   node client-tester.js ^<ip^>     (to test a different server)
 echo.
 pause

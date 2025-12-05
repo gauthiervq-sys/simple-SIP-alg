@@ -453,18 +453,22 @@ function printResults(results) {
 async function main() {
     const args = process.argv.slice(2);
     
-    if (args.length === 0 || args[0] === '-h' || args[0] === '--help') {
+    // Default server IP
+    const DEFAULT_SERVER_IP = '193.105.36.15';
+    
+    if (args[0] === '-h' || args[0] === '--help') {
         console.log(`
 ${colors.bright}SIP ALG Client Tester${colors.reset}
 
 ${colors.cyan}Usage:${colors.reset}
-  node client-tester.js <server-ip> [ports]
+  node client-tester.js [server-ip] [ports]
 
 ${colors.cyan}Arguments:${colors.reset}
-  server-ip    IP address of the SIP test server
+  server-ip    IP address of the SIP test server (default: ${DEFAULT_SERVER_IP})
   ports        Comma-separated list of ports to test (default: 5060,5062)
 
 ${colors.cyan}Examples:${colors.reset}
+  node client-tester.js
   node client-tester.js 193.105.36.15
   node client-tester.js 193.105.36.15 5060,5062
   node client-tester.js example.com 5060
@@ -482,7 +486,7 @@ ${colors.cyan}Requirements:${colors.reset}
         process.exit(0);
     }
     
-    const serverIp = args[0];
+    const serverIp = args[0] || DEFAULT_SERVER_IP;
     const ports = args[1] ? args[1].split(',').map(p => parseInt(p.trim(), 10)) : [5060, 5062];
     const localIp = getLocalIp();
     
