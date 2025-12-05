@@ -381,6 +381,29 @@ function print(text, color = '') {
 }
 
 /**
+ * Wait for user input (Windows CMD pause functionality)
+ */
+function waitForKeypress() {
+    return new Promise((resolve) => {
+        // Check if we're in an interactive terminal (not piped)
+        if (!process.stdin.isTTY) {
+            resolve();
+            return;
+        }
+        
+        print('\nPress any key to continue...', colors.cyan);
+        
+        process.stdin.setRawMode(true);
+        process.stdin.resume();
+        process.stdin.once('data', () => {
+            process.stdin.setRawMode(false);
+            process.stdin.pause();
+            resolve();
+        });
+    });
+}
+
+/**
  * Print results
  */
 function printResults(results) {
@@ -512,6 +535,9 @@ ${colors.cyan}Requirements:${colors.reset}
         const results = await Promise.all(allTests);
         printResults(results);
         
+        // Wait for keypress before exiting (especially important for Windows .exe)
+        await waitForKeypress();
+        
         // Exit with appropriate code
         const hasAlg = results.some(r => r.code === RESULT_CODES.TRUE.code);
         const hasFailed = results.some(r => r.code === RESULT_CODES.FAILED.code);
@@ -525,6 +551,7 @@ ${colors.cyan}Requirements:${colors.reset}
         }
     } catch (error) {
         print(`\nError: ${error.message}`, colors.red);
+        await waitForKeypress();
         process.exit(1);
     }
 }
