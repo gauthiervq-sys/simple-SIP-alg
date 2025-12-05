@@ -609,6 +609,7 @@ function generateSessionId() {
     return Math.floor(1000 + Math.random() * 9000).toString();
 }
 
+
 /**
  * Main function
  */
@@ -631,29 +632,21 @@ async function main() {
         }
     }
     
-    // Auto-generate session ID if not provided
-    if (!reportSessionId) {
-        reportSessionId = generateSessionId();
-    }
-    
     if (filteredArgs[0] === '-h' || filteredArgs[0] === '--help') {
         console.log(`
 ${colors.bright}SIP ALG Client Tester${colors.reset}
 
 ${colors.cyan}Usage:${colors.reset}
-  node client-tester.js [server-ip] [ports] [--report <report-id>]
+  node client-tester.js [server-ip] [ports] --report <report-id>
 
 ${colors.cyan}Arguments:${colors.reset}
   server-ip    IP address of the SIP test server (default: ${DEFAULT_SERVER_IP})
   ports        Comma-separated list of ports to test (default: 5060,5062)
-  --report     Optional: Specify a custom Report ID (auto-generated if not provided)
+  --report     REQUIRED: Report ID from the web interface
 
 ${colors.cyan}Examples:${colors.reset}
-  node client-tester.js
-  node client-tester.js 193.105.36.15
-  node client-tester.js 193.105.36.15 5060,5062
-  node client-tester.js example.com 5060
   node client-tester.js --report 1234
+  node client-tester.js 193.105.36.15 --report 8492
   node client-tester.js 193.105.36.15 5060,5062 --report 8492
 
 ${colors.cyan}Description:${colors.reset}
@@ -661,17 +654,17 @@ ${colors.cyan}Description:${colors.reset}
   It sends SIP INVITE requests from your PC to the test server and
   compares the mirrored response to detect any modifications.
   
-  A Report ID is automatically generated for each test run. Use this
-  Report ID to view the results in the web interface at:
-  http://${DEFAULT_SERVER_IP}:${DEFAULT_WEB_PORT}
-  
-  The results are automatically sent to the server and displayed in
-  the web interface when you enter your Report ID.
+  ${colors.yellow}IMPORTANT: You must first open the web interface to get a Report ID:${colors.reset}
+  1. Open http://${DEFAULT_SERVER_IP}:${DEFAULT_WEB_PORT} in your browser
+  2. Note the Report ID shown on the page (displayed in large numbers)
+  3. Run this tool with --report <report-id>
+  4. Results will automatically appear in your browser
 
 ${colors.cyan}Requirements:${colors.reset}
   - Server must be running the SIP mirror service on the specified ports
   - Firewall must allow UDP/TCP traffic on test ports
   - Run this from the client PC you want to test
+  - Browser must be open at the web interface to receive results
 `);
         process.exit(0);
     }
@@ -679,6 +672,31 @@ ${colors.cyan}Requirements:${colors.reset}
     const serverIp = filteredArgs[0] || DEFAULT_SERVER_IP;
     const ports = filteredArgs[1] ? filteredArgs[1].split(',').map(p => parseInt(p.trim(), 10)) : [5060, 5062];
     const localIp = getLocalIp();
+    
+    // Report ID is now required
+    if (!reportSessionId) {
+        print('\n' + '='.repeat(70), colors.red);
+        print('  ERROR: Report ID is required!', colors.bright + colors.red);
+        print('='.repeat(70), colors.red);
+        print('', colors.reset);
+        print('To run this test, you must first:', colors.yellow);
+        print('', colors.reset);
+        print(`  1. Open http://${serverIp}:${DEFAULT_WEB_PORT} in your browser`, colors.cyan);
+        print('', colors.reset);
+        print('  2. Look for the Report ID displayed on the page', colors.cyan);
+        print('     (it will be shown as a large 4-digit number)', colors.cyan);
+        print('', colors.reset);
+        print('  3. Run this tool again with the --report parameter:', colors.cyan);
+        print(`     ${colors.bright}${process.argv[0]} ${process.argv[1]} --report <your-report-id>${colors.reset}`, colors.green);
+        print('', colors.reset);
+        print('  Example:', colors.yellow);
+        print(`     ${process.argv[0]} ${process.argv[1]} --report 1234`, colors.green);
+        print('', colors.reset);
+        print('For more help, run with --help', colors.cyan);
+        print('', colors.reset);
+        await waitForKeypress();
+        process.exit(1);
+    }
     
     print('\nSIP ALG Client Tester', colors.bright + colors.cyan);
     print('='.repeat(70), colors.cyan);
@@ -688,8 +706,8 @@ ${colors.cyan}Requirements:${colors.reset}
     print(`Test Ports: ${ports.join(', ')}`, colors.bright);
     console.log('');
     print(`Report ID: ${reportSessionId}`, colors.bright + colors.yellow);
-    print('Use this Report ID to view results in the web interface:', colors.cyan);
-    print(`  http://${serverIp}:${DEFAULT_WEB_PORT}`, colors.cyan);
+    print('Results will be sent to the web interface.', colors.cyan);
+    print(`Make sure your browser is open at: http://${serverIp}:${DEFAULT_WEB_PORT}`, colors.cyan);
     console.log('');
     print('Starting test...', colors.yellow);
     console.log('');
@@ -706,7 +724,7 @@ ${colors.cyan}Requirements:${colors.reset}
         const results = await Promise.all(allTests);
         printResults(results);
         
-        // Always send results to server with the generated/provided session ID
+        // Always send results to server with the provided session ID
         await sendResultsToServer(serverIp, reportSessionId, results);
         
         // Wait for keypress before exiting (especially important for Windows .exe)
