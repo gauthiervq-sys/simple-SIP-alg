@@ -75,18 +75,22 @@
                     const data = event.detail;
                     setIsTestRunning(false);
                     
-                    if (data.error) {
+                    if (data && data.error) {
                         setTestError(data.error);
                         setTestResult(null);
-                    } else if (data.result) {
+                    } else if (data && data.result) {
                         setTestResult(data.result);
                         setTestError(null);
+                    } else {
+                        // Handle unexpected data structure
+                        setTestError('Received invalid response from server');
+                        setTestResult(null);
                     }
                 };
                 
                 window.addEventListener('algTestResult', handleAlgResult);
                 return () => window.removeEventListener('algTestResult', handleAlgResult);
-            }, []);
+            }, []); // Empty dependency array ensures this runs only on mount/unmount
             
             const getDownloadUrl = (platform) => {
                 const baseUrl = window.location.origin;
@@ -214,18 +218,18 @@
                                                         <span className="text-slate-300 text-sm">
                                                             Port {port} (UDP)
                                                         </span>
-                                                        <div className={`flex items-center gap-2 ${getResultColor(portResult.udp.code)}`}>
-                                                            {getResultIcon(portResult.udp.code)}
-                                                            <span className="font-semibold">{portResult.udp.text}</span>
+                                                        <div className={`flex items-center gap-2 ${getResultColor(portResult.udp?.code)}`}>
+                                                            {getResultIcon(portResult.udp?.code)}
+                                                            <span className="font-semibold">{portResult.udp?.text || 'Unknown'}</span>
                                                         </div>
                                                     </div>
                                                 )}
-                                                {portResult.udp && portResult.udp.error && (
+                                                {portResult.udp?.error && (
                                                     <div className="ml-3 text-xs text-yellow-400 bg-yellow-900/20 p-2 rounded">
                                                         Error: {portResult.udp.error}
                                                     </div>
                                                 )}
-                                                {portResult.udp && portResult.udp.diff && (
+                                                {portResult.udp?.diff && (
                                                     <div className="ml-3 text-xs text-slate-400 bg-slate-900/50 p-2 rounded">
                                                         <pre className="whitespace-pre-wrap">{portResult.udp.diff}</pre>
                                                     </div>
@@ -237,18 +241,18 @@
                                                         <span className="text-slate-300 text-sm">
                                                             Port {port} (TCP)
                                                         </span>
-                                                        <div className={`flex items-center gap-2 ${getResultColor(portResult.tcp.code)}`}>
-                                                            {getResultIcon(portResult.tcp.code)}
-                                                            <span className="font-semibold">{portResult.tcp.text}</span>
+                                                        <div className={`flex items-center gap-2 ${getResultColor(portResult.tcp?.code)}`}>
+                                                            {getResultIcon(portResult.tcp?.code)}
+                                                            <span className="font-semibold">{portResult.tcp?.text || 'Unknown'}</span>
                                                         </div>
                                                     </div>
                                                 )}
-                                                {portResult.tcp && portResult.tcp.error && (
+                                                {portResult.tcp?.error && (
                                                     <div className="ml-3 text-xs text-yellow-400 bg-yellow-900/20 p-2 rounded">
                                                         Error: {portResult.tcp.error}
                                                     </div>
                                                 )}
-                                                {portResult.tcp && portResult.tcp.diff && (
+                                                {portResult.tcp?.diff && (
                                                     <div className="ml-3 text-xs text-slate-400 bg-slate-900/50 p-2 rounded">
                                                         <pre className="whitespace-pre-wrap">{portResult.tcp.diff}</pre>
                                                     </div>
