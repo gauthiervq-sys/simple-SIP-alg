@@ -42,16 +42,28 @@ cd simple-SIP-alg
 npm install
 ```
 
-3. Build client test tools (optional, for deployment):
+3. **Build client test tools (REQUIRED for downloads to work):**
 ```bash
 ./build-client.sh
 # or on Windows: build-client.bat
 # or using npm: npm run build:client
 ```
 
+**Important:** The client test tools must be built before starting the server, otherwise users will get "File Not Available" errors when trying to download them. The executables are pre-configured to connect to **193.105.36.15** automatically.
+
 ## Usage
 
 ### Quick Start (Manual)
+
+**IMPORTANT:** Before starting the server for the first time, you must build the client executables. Without this step, users will get "File Not Available" errors when trying to download test tools.
+
+```bash
+# Build client executables (REQUIRED - do this first!)
+./build-client.sh  # or build-client.bat on Windows
+
+# Validate that executables were built successfully
+npm run validate
+```
 
 1. Start the server:
 ```bash
@@ -93,16 +105,22 @@ To accurately detect SIP ALG modifications, the test **must be run from your loc
    - Windows: `sip-alg-tester-win.exe`
    - Linux: `sip-alg-tester-linux`
    - macOS: `sip-alg-tester-macos`
-4. Run the downloaded tool from your PC:
+4. Run the downloaded tool from your PC (no arguments needed - connects to 193.105.36.15 by default):
 
 **Windows:**
 ```cmd
-sip-alg-tester-win.exe <server-ip>
+sip-alg-tester-win.exe
 ```
 
 **Linux/macOS:**
 ```bash
 chmod +x sip-alg-tester-linux  # or sip-alg-tester-macos
+./sip-alg-tester-linux
+```
+
+To test a different server, you can optionally provide the server IP:
+```bash
+sip-alg-tester-win.exe <server-ip>
 ./sip-alg-tester-linux <server-ip>
 ```
 
@@ -111,12 +129,18 @@ chmod +x sip-alg-tester-linux  # or sip-alg-tester-macos
 If you have Node.js installed on your client PC:
 
 ```bash
-node client-tester.js <server-ip> [ports]
+node client-tester.js [server-ip] [ports]
 ```
 
 Examples:
 ```bash
-node client-tester.js 193.105.36.15
+# Connect to default server (193.105.36.15)
+node client-tester.js
+
+# Connect to specific server
+node client-tester.js 192.168.1.100
+
+# Connect to specific server with custom ports
 node client-tester.js 193.105.36.15 5060,5062
 ```
 

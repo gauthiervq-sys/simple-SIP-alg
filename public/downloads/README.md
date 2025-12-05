@@ -2,6 +2,11 @@
 
 This directory contains the standalone executable files for the SIP ALG Client Tester.
 
+## Pre-configured Server
+
+**Important:** All executables are pre-configured to connect to server **193.105.36.15** by default.
+Users can simply run the executable without any command-line arguments!
+
 ## Building the Executables
 
 To build the executables, run the build script from the project root:
@@ -29,6 +34,25 @@ After building, this directory will contain:
 - `sip-alg-tester-macos` - macOS executable (x64)
 
 These files are excluded from git due to their large size. They should be built on the server or as part of the deployment process.
+
+## Usage
+
+**Windows:**
+```cmd
+sip-alg-tester-win.exe
+```
+
+**Linux/macOS:**
+```bash
+chmod +x sip-alg-tester-linux
+./sip-alg-tester-linux
+```
+
+To test a different server, provide the IP as an argument:
+```bash
+sip-alg-tester-win.exe 192.168.1.100
+./sip-alg-tester-linux 192.168.1.100
+```
 
 ## Deployment
 
