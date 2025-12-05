@@ -97,7 +97,7 @@ http://193.105.36.15:3000
 
 To accurately detect SIP ALG modifications, the test **must be run from your local computer** (not from the server). This ensures that SIP packets pass through your router where ALG modifications occur.
 
-#### Option 1: Using the Web Interface (Recommended)
+#### Downloading the Client Test Tool
 
 1. Navigate to the web interface at `http://<server-ip>:3000`
 2. Click on the "SIP ALG Check" tab
@@ -124,7 +124,7 @@ sip-alg-tester-win.exe <server-ip>
 ./sip-alg-tester-linux <server-ip>
 ```
 
-#### Option 2: Using Node.js Directly
+#### Alternative: Using Node.js Directly
 
 If you have Node.js installed on your client PC:
 
