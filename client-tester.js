@@ -505,6 +505,104 @@ function printResults(results) {
 }
 
 /**
+ * Send test results to server
+ */
+async function sendResultsToServer(serverIp, sessionId, results) {
+    const http = require('http');
+    const https = require('https');
+    
+    print('\nSending results to server...', colors.cyan);
+    
+    // Organize results by port (similar to server-side format)
+    const portResults = {};
+    for (const result of results) {
+        const port = result.port;
+        const transport = result.transport;
+        
+        if (!portResults[port]) {
+            portResults[port] = { udp: null, tcp: null };
+        }
+        
+        portResults[port][transport] = result;
+    }
+    
+    // Determine overall return code
+    let returnCode = RESULT_CODES.FALSE.code;
+    let hasAnyFailed = false;
+    
+    for (const result of results) {
+        if (result.code === RESULT_CODES.TRUE.code) {
+            returnCode = RESULT_CODES.TRUE.code;
+            break;
+        } else if (result.code === RESULT_CODES.FAILED.code) {
+            hasAnyFailed = true;
+        }
+    }
+    
+    if (returnCode !== RESULT_CODES.TRUE.code && hasAnyFailed) {
+        returnCode = RESULT_CODES.FAILED.code;
+    }
+    
+    const payload = JSON.stringify({
+        sessionId: sessionId,
+        result: {
+            ports: portResults,
+            returnCode: returnCode
+        }
+    });
+    
+    const options = {
+        hostname: serverIp,
+        port: 3000,
+        path: '/api/test-result',
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'Content-Length': Buffer.byteLength(payload)
+        }
+    };
+    
+    return new Promise((resolve, reject) => {
+        const protocol = serverIp.includes('localhost') || serverIp.startsWith('192.168.') || serverIp.startsWith('10.') ? http : http;
+        
+        const req = protocol.request(options, (res) => {
+            let data = '';
+            
+            res.on('data', (chunk) => {
+                data += chunk;
+            });
+            
+            res.on('end', () => {
+                if (res.statusCode >= 200 && res.statusCode < 300) {
+                    print('✓ Results sent successfully to web interface!', colors.green);
+                    resolve();
+                } else {
+                    print(`⚠ Server responded with status ${res.statusCode}`, colors.yellow);
+                    try {
+                        const response = JSON.parse(data);
+                        if (response.error) {
+                            print(`  Error: ${response.error}`, colors.yellow);
+                        }
+                    } catch (e) {
+                        // Ignore JSON parse errors
+                    }
+                    resolve(); // Still resolve to allow the program to continue
+                }
+            });
+        });
+        
+        req.on('error', (error) => {
+            print(`✗ Failed to send results to server: ${error.message}`, colors.red);
+            print('  The test completed but results could not be reported.', colors.yellow);
+            resolve(); // Still resolve to allow the program to continue
+        });
+        
+        req.write(payload);
+        req.end();
+    });
+}
+
+/**
  * Main function
  */
 async function main() {
@@ -513,27 +611,45 @@ async function main() {
     // Default server IP
     const DEFAULT_SERVER_IP = '193.105.36.15';
     
-    if (args[0] === '-h' || args[0] === '--help') {
+    // Check for --report argument
+    let reportSessionId = null;
+    let filteredArgs = [];
+    for (let i = 0; i < args.length; i++) {
+        if (args[i] === '--report' && i + 1 < args.length) {
+            reportSessionId = args[i + 1];
+            i++; // Skip the next argument as it's the session ID
+        } else {
+            filteredArgs.push(args[i]);
+        }
+    }
+    
+    if (filteredArgs[0] === '-h' || filteredArgs[0] === '--help') {
         console.log(`
 ${colors.bright}SIP ALG Client Tester${colors.reset}
 
 ${colors.cyan}Usage:${colors.reset}
-  node client-tester.js [server-ip] [ports]
+  node client-tester.js [server-ip] [ports] [--report <session-id>]
 
 ${colors.cyan}Arguments:${colors.reset}
   server-ip    IP address of the SIP test server (default: ${DEFAULT_SERVER_IP})
   ports        Comma-separated list of ports to test (default: 5060,5062)
+  --report     Session ID to report results back to the web interface
 
 ${colors.cyan}Examples:${colors.reset}
   node client-tester.js
   node client-tester.js 193.105.36.15
   node client-tester.js 193.105.36.15 5060,5062
   node client-tester.js example.com 5060
+  node client-tester.js --report 8492
+  node client-tester.js 193.105.36.15 5060,5062 --report 8492
 
 ${colors.cyan}Description:${colors.reset}
   This tool tests if your router's SIP ALG is modifying SIP packets.
   It sends SIP INVITE requests from your PC to the test server and
   compares the mirrored response to detect any modifications.
+  
+  When using --report, the results are sent back to the server and
+  displayed in the web interface associated with the session ID.
 
 ${colors.cyan}Requirements:${colors.reset}
   - Server must be running the SIP mirror service on the specified ports
@@ -543,8 +659,8 @@ ${colors.cyan}Requirements:${colors.reset}
         process.exit(0);
     }
     
-    const serverIp = args[0] || DEFAULT_SERVER_IP;
-    const ports = args[1] ? args[1].split(',').map(p => parseInt(p.trim(), 10)) : [5060, 5062];
+    const serverIp = filteredArgs[0] || DEFAULT_SERVER_IP;
+    const ports = filteredArgs[1] ? filteredArgs[1].split(',').map(p => parseInt(p.trim(), 10)) : [5060, 5062];
     const localIp = getLocalIp();
     
     print('\nSIP ALG Client Tester', colors.bright + colors.cyan);
@@ -553,6 +669,9 @@ ${colors.cyan}Requirements:${colors.reset}
     print(`Local IP:  ${localIp}`, colors.bright);
     print(`Server IP: ${serverIp}`, colors.bright);
     print(`Test Ports: ${ports.join(', ')}`, colors.bright);
+    if (reportSessionId) {
+        print(`Session ID: ${reportSessionId}`, colors.bright + colors.yellow);
+    }
     console.log('');
     print('Starting test...', colors.yellow);
     console.log('');
@@ -568,6 +687,11 @@ ${colors.cyan}Requirements:${colors.reset}
     try {
         const results = await Promise.all(allTests);
         printResults(results);
+        
+        // If --report argument was provided, send results to server
+        if (reportSessionId) {
+            await sendResultsToServer(serverIp, reportSessionId, results);
+        }
         
         // Wait for keypress before exiting (especially important for Windows .exe)
         await waitForKeypress();

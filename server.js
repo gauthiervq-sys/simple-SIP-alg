@@ -21,6 +21,17 @@ const ALG_TEST_IP = process.env.SIPALG_TEST_IP || HOST_IP;
 const ALG_TEST_PORT = parseInt(process.env.SIPALG_TEST_PORT || '5060', 10);
 const OPEN_STATE = 1; // WebSocket.OPEN constant value, used for both WebSocket and UDP wrapper
 
+// Session management: Map session IDs to WebSocket connections
+const sessionConnections = new Map(); // sessionId -> WebSocket
+
+// Generate unique 4-digit session ID
+function generateSessionId() {
+    return Math.floor(1000 + Math.random() * 9000).toString();
+}
+
+// Middleware for parsing JSON
+app.use(express.json());
+
 // Serve static frontend files
 app.use(express.static(path.join(__dirname, 'public')));
 
@@ -29,6 +40,21 @@ function setupWebSocketHandlers(wss, portName) {
     wss.on('connection', (ws, req) => {
         const clientIp = req.socket.remoteAddress;
         console.log(`[Port ${portName}] New client connected from ${clientIp}`);
+        
+        // Generate and assign a session ID to this WebSocket connection
+        const sessionId = generateSessionId();
+        ws.sessionId = sessionId;
+        sessionConnections.set(sessionId, ws);
+        
+        console.log(`[Port ${portName}] Assigned session ID: ${sessionId} to client ${clientIp}`);
+        
+        // Send session ID to the client
+        if (ws.readyState === OPEN_STATE) {
+            ws.send(JSON.stringify({ 
+                type: 'SESSION_ID', 
+                sessionId: sessionId 
+            }));
+        }
 
         ws.on('message', (message) => {
             try {
@@ -40,7 +66,9 @@ function setupWebSocketHandlers(wss, portName) {
         });
 
         ws.on('close', () => {
-            console.log(`[Port ${portName}] Client disconnected`);
+            console.log(`[Port ${portName}] Client disconnected (session: ${sessionId})`);
+            // Remove session mapping when connection closes
+            sessionConnections.delete(sessionId);
         });
     });
 }
@@ -137,6 +165,44 @@ function handleMessage(ws, data, clientIp) {
 server.listen(WEB_PORT, '0.0.0.0', () => {
     console.log(`SIP Check Server running on http://0.0.0.0:${WEB_PORT}`);
     console.log(`Public access: http://${HOST_IP}:${WEB_PORT}`);
+});
+
+// API endpoint to receive test results from client script
+app.post('/api/test-result', (req, res) => {
+    try {
+        const { sessionId, result } = req.body;
+        
+        if (!sessionId) {
+            return res.status(400).json({ error: 'Session ID is required' });
+        }
+        
+        if (!result) {
+            return res.status(400).json({ error: 'Test result is required' });
+        }
+        
+        console.log(`[API] Received test result for session ${sessionId}`);
+        
+        // Find the WebSocket connection associated with this session ID
+        const ws = sessionConnections.get(sessionId);
+        
+        if (!ws || ws.readyState !== OPEN_STATE) {
+            console.log(`[API] No active WebSocket connection found for session ${sessionId}`);
+            return res.status(404).json({ error: 'Session not found or connection closed' });
+        }
+        
+        // Send the result to the web client via WebSocket
+        ws.send(JSON.stringify({
+            type: 'CLIENT_TEST_RESULT',
+            result: result
+        }));
+        
+        console.log(`[API] Forwarded test result to WebSocket client for session ${sessionId}`);
+        
+        res.json({ success: true, message: 'Result forwarded to web client' });
+    } catch (error) {
+        console.error('[API] Error processing test result:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
 });
 
 // Create UDP sockets for ports 5060 and 5062
